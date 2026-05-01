@@ -55,21 +55,26 @@ if st.button("🎲 Generate Name"):
 import base64
 
 def generate_portrait(name, race, char_class):
-    prompt = f"""
-    Fantasy character portrait of a {race} {char_class} named {name}.
-    Highly detailed, cinematic lighting, D&D style, digital art.
-    """
+    try:
+        prompt = f"""
+        Fantasy character portrait of a {race} {char_class} named {name}.
+        Highly detailed, cinematic lighting, D&D style, digital art.
+        """
 
-    result = client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="512x512"
-    )
+        result = client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="512x512"
+        )
 
-    image_base64 = result.data[0].b64_json
-    image_bytes = base64.b64decode(image_base64)
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
 
-    return image_bytes
+        return image_bytes
+
+    except Exception as e:
+        st.error(f"Image generation failed: {e}")
+        return None
 # --- Generate Backstory ---
 
 if st.button("📜 Generate Full Character"):
@@ -105,9 +110,12 @@ if st.button("📜 Generate Full Character"):
         st.subheader("🎨 Character Portrait")
 
         with st.spinner("Painting your character..."):
-            image = generate_portrait(name, race, char_class)
+         image = generate_portrait(name, race, char_class)
 
-        st.image(image, caption=f"{name} the {race} {char_class}")
+if image:
+    st.image(image, caption=f"{name} the {race} {char_class}")
+else:
+    st.warning("Could not generate portrait (API or quota issue).") 
 
         # 📜 Show story
         st.subheader("✨ Your Character")
