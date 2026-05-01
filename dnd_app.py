@@ -1,17 +1,25 @@
 import streamlit as st
 from openai import OpenAI
+import base64
+from io import BytesIO
 
-#background art
+# -------------------------------
+# 🔐 API
+# -------------------------------
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+st.set_page_config(page_title="D&D Character Generator", page_icon="🧙")
+
+# -------------------------------
+# 🎨 STYLING
+# -------------------------------
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
     background-image: url("https://images.unsplash.com/photo-1518709268805-4e9042af2176");
     background-size: cover;
-    background-position: center;
     background-attachment: fixed;
 }
-
-/* Dark overlay for readability */
 [data-testid="stAppViewContainer"]::before {
     content: "";
     position: fixed;
@@ -19,141 +27,162 @@ st.markdown("""
     background: rgba(0,0,0,0.6);
     z-index: -1;
 }
+.card {
+    background: rgba(20,20,30,0.9);
+    padding: 20px;
+    border-radius: 15px;
+    border: 2px solid #c9a96e;
+}
+.title {
+    font-size: 28px;
+    color: #f5d27a;
+    font-weight: bold;
+}
+.sub {
+    color: #ddd;
+}
 </style>
 """, unsafe_allow_html=True)
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# -------------------------------
+# 🎲 FUNCTIONS
+# -------------------------------
 
-st.set_page_config(page_title="D&D Character Generator", page_icon="🧙")
+def generate_name(race):
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": f"Generate a fantasy name for a {race} character."}]
+    )
+    return response.choices[0].message.content.strip()
 
-st.title("🧙 AI D&D Character Creator")
-st.caption("Generate names, backstories, and personalities for your D&D Beyond characters")
 
-# --- Inputs ---
-race = st.text_input("Race (e.g., Elf, Tiefling, Human)")
-char_class = st.text_input("Class (e.g., Rogue, Wizard, Fighter)")
-background = st.text_input("Background (optional)")
-traits = st.text_area("Personality / Traits (optional)")
-name = st.text_input(
-    "Character Name",
-    value=st.session_state.get("name", "")
-)
-# --- Generate Name ---
-if st.button("🎲 Generate Name", key="gen_name"):
-    if race:
-        prompt = f"Generate a unique fantasy name suitable for a {race} character."
-        
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+def generate_stats():
+    import random
+    return {
+        "STR": random.randint(8, 18),
+        "DEX": random.randint(8, 18),
+        "CON": random.randint(8, 18),
+        "INT": random.randint(8, 18),
+        "WIS": random.randint(8, 18),
+        "CHA": random.randint(8, 18),
+    }
 
-        generated_name = response.choices[0].message.content.strip()
-        st.session_state["name"] = generated_name
 
-# Use generated name or manual input
-import base64
+def generate_story(name, race, char_class, background, traits):
+    prompt = f"""
+    Create a detailed Dungeons & Dragons character.
+
+    Name: {name}
+    Race: {race}
+    Class: {char_class}
+    Background: {background}
+    Traits: {traits}
+
+    Include origin, personality, motivation, and a plot hook.
+    """
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
 
 def generate_portrait(name, race, char_class):
     try:
-        prompt = f"""
-        Fantasy character portrait of a {race} {char_class} named {name}.
-        Highly detailed, cinematic lighting, D&D style, digital art.
-        """
-
         result = client.images.generate(
             model="gpt-image-1",
-            prompt=prompt,
+            prompt=f"fantasy portrait of {name}, a {race} {char_class}, D&D style",
             size="512x512"
         )
-
-        image_base64 = result.data[0].b64_json
-        image_bytes = base64.b64decode(image_base64)
-
-        return image_bytes
-
-    except Exception as e:
-        st.error(f"Image generation failed: {e}")
+        img = base64.b64decode(result.data[0].b64_json)
+        return img
+    except:
         return None
-# --- Generate Backstory ---
 
-if st.button("📜 Generate Full Character", key="gen_character"):
+
+# -------------------------------
+# 🖥️ UI INPUTS
+# -------------------------------
+
+st.title("🧙 AI D&D Character Creator")
+
+race = st.text_input("Race")
+char_class = st.text_input("Class")
+background = st.text_input("Background")
+traits = st.text_area("Traits")
+
+if st.button("🎲 Generate Name"):
+    if race:
+        st.session_state["name"] = generate_name(race)
+
+name = st.text_input("Name", value=st.session_state.get("name", ""))
+
+level = st.slider("Level", 1, 20, 1)
+
+# -------------------------------
+# 📜 GENERATE CHARACTER
+# -------------------------------
+
+if st.button("📜 Generate Character", key="gen_char"):
     if name and race and char_class:
 
-        with st.spinner("Forging your character..."):
-            # Generate story
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{
-                    "role": "user",
-                    "content": f"""
-                    Create a detailed Dungeons & Dragons character.
-
-                    Name: {name}
-                    Race: {race}
-                    Class: {char_class}
-                    Background: {background}
-                    Traits: {traits}
-
-                    Include:
-                    - Origin story
-                    - Personality
-                    - Motivation
-                    - A unique plot hook
-                    """
-                }]
-            )
-
-            story = response.choices[0].message.content
-
-        # 🎨 Generate portrait AFTER inputs exist
-        st.subheader("🎨 Character Portrait")
-
-        with st.spinner("Painting your character..."):
-         image = generate_portrait(name, race, char_class)
-
-if st.button("📜 Generate Full Character"):
-    if name and race and char_class:
-
-        with st.spinner("Forging your character..."):
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{
-                    "role": "user",
-                    "content": f"""
-                    Create a detailed Dungeons & Dragons character.
-
-                    Name: {name}
-                    Race: {race}
-                    Class: {char_class}
-                    Background: {background}
-                    Traits: {traits}
-
-                    Include:
-                    - Origin story
-                    - Personality
-                    - Motivation
-                    - A unique plot hook
-                    """
-                }]
-            )
-
-            story = response.choices[0].message.content
-
-        # 🎨 Portrait
-        st.subheader("🎨 Character Portrait")
-
-        with st.spinner("Painting your character..."):
+        with st.spinner("Generating character..."):
+            story = generate_story(name, race, char_class, background, traits)
+            stats = generate_stats()
+            hp = stats["CON"] * level
             image = generate_portrait(name, race, char_class)
 
-        if image:
-            st.image(image, caption=f"{name} the {race} {char_class}")
-        else:
-            st.warning("Could not generate portrait.")
+        # -------------------------------
+        # 🎴 CHARACTER CARD
+        # -------------------------------
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        # 📜 Story
-        st.subheader("✨ Your Character")
-        st.write(story)
+        st.markdown(f'<div class="title">{name}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sub">{race} {char_class} | Level {level}</div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        col1, col2 = st.columns([1,2])
+
+        with col1:
+            if image:
+                st.image(image)
+            else:
+                st.image("https://via.placeholder.com/300x400?text=No+Portrait")
+
+            st.markdown(f"**❤️ HP:** {hp}")
+
+            st.markdown("### 📊 Stats")
+            for k, v in stats.items():
+                st.write(f"{k}: {v}")
+
+        with col2:
+            st.markdown("### 📜 Backstory")
+            st.write(story)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # -------------------------------
+        # 📄 DOWNLOAD
+        # -------------------------------
+        file_content = f"""
+        {name}
+        {race} {char_class} (Level {level})
+
+        HP: {hp}
+
+        Stats:
+        {stats}
+
+        Backstory:
+        {story}
+        """
+
+        st.download_button(
+            "📄 Download Character Sheet",
+            data=file_content,
+            file_name=f"{name}_character.txt"
+        )
 
     else:
-        st.warning("Please fill in name, race, and class.")
+        st.warning("Fill in name, race, and class.")
