@@ -39,7 +39,7 @@ name = st.text_input(
     value=st.session_state.get("name", "")
 )
 # --- Generate Name ---
-if st.button("🎲 Generate Name"):
+if st.button("🎲 Generate Name", key="gen_name"):
     if race:
         prompt = f"Generate a unique fantasy name suitable for a {race} character."
         
@@ -77,7 +77,7 @@ def generate_portrait(name, race, char_class):
         return None
 # --- Generate Backstory ---
 
-if st.button("📜 Generate Full Character"):
+if st.button("📜 Generate Full Character", key="gen_character"):
     if name and race and char_class:
 
         with st.spinner("Forging your character..."):
