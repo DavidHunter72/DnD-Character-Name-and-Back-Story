@@ -34,7 +34,10 @@ race = st.text_input("Race (e.g., Elf, Tiefling, Human)")
 char_class = st.text_input("Class (e.g., Rogue, Wizard, Fighter)")
 background = st.text_input("Background (optional)")
 traits = st.text_area("Personality / Traits (optional)")
-
+name = st.text_input(
+    "Character Name",
+    value=st.session_state.get("name", "")
+)
 # --- Generate Name ---
 if st.button("🎲 Generate Name"):
     if race:
@@ -68,38 +71,45 @@ def generate_portrait(name, race, char_class):
 
     return image_bytes
 # --- Generate Backstory ---
-st.subheader("🎨 Character Portrait")
 
-with st.spinner("Painting your character..."):
-    image = generate_portrait(name, race, char_class)
-
-st.image(image, caption=f"{name} the {race} {char_class}")
 if st.button("📜 Generate Full Character"):
     if name and race and char_class:
-        prompt = f"""
-        Create a detailed Dungeons & Dragons character.
-
-        Name: {name}
-        Race: {race}
-        Class: {char_class}
-        Background: {background}
-        Traits: {traits}
-
-        Include:
-        - Origin story
-        - Personality
-        - Motivation
-        - A unique plot hook
-        """
 
         with st.spinner("Forging your character..."):
+            # Generate story
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{
+                    "role": "user",
+                    "content": f"""
+                    Create a detailed Dungeons & Dragons character.
+
+                    Name: {name}
+                    Race: {race}
+                    Class: {char_class}
+                    Background: {background}
+                    Traits: {traits}
+
+                    Include:
+                    - Origin story
+                    - Personality
+                    - Motivation
+                    - A unique plot hook
+                    """
+                }]
             )
 
             story = response.choices[0].message.content
 
+        # 🎨 Generate portrait AFTER inputs exist
+        st.subheader("🎨 Character Portrait")
+
+        with st.spinner("Painting your character..."):
+            image = generate_portrait(name, race, char_class)
+
+        st.image(image, caption=f"{name} the {race} {char_class}")
+
+        # 📜 Show story
         st.subheader("✨ Your Character")
         st.write(story)
 
