@@ -1,6 +1,27 @@
 import streamlit as st
 from openai import OpenAI
 
+#background art
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background-image: url("https://images.unsplash.com/photo-1518709268805-4e9042af2176");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+/* Dark overlay for readability */
+[data-testid="stAppViewContainer"]::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: -1;
+}
+</style>
+""", unsafe_allow_html=True)
+
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="D&D Character Generator", page_icon="🧙")
@@ -28,11 +49,12 @@ if st.button("🎲 Generate Name"):
         st.session_state["name"] = generated_name
 
 # Use generated name or manual input
-name = st.text_input("Character Name", value=st.session_state.get("name", ""))
+import base64
+
 def generate_portrait(name, race, char_class):
     prompt = f"""
-    A detailed fantasy portrait of a {race} {char_class} named {name}.
-    Highly detailed, cinematic lighting, digital art, D&D style, character portrait.
+    Fantasy character portrait of a {race} {char_class} named {name}.
+    Highly detailed, cinematic lighting, D&D style, digital art.
     """
 
     result = client.images.generate(
@@ -41,8 +63,17 @@ def generate_portrait(name, race, char_class):
         size="512x512"
     )
 
-    return result.data[0].url
+    image_base64 = result.data[0].b64_json
+    image_bytes = base64.b64decode(image_base64)
+
+    return image_bytes
 # --- Generate Backstory ---
+st.subheader("🎨 Character Portrait")
+
+with st.spinner("Painting your character..."):
+    image = generate_portrait(name, race, char_class)
+
+st.image(image, caption=f"{name} the {race} {char_class}")
 if st.button("📜 Generate Full Character"):
     if name and race and char_class:
         prompt = f"""
