@@ -47,13 +47,35 @@ st.markdown("""
 # -------------------------------
 # 🎲 FUNCTIONS
 # -------------------------------
-
 def generate_name(race):
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": f"Generate a fantasy name for a {race} character."}]
+        messages=[{
+            "role": "user",
+            "content": f"""
+            Generate ONE fantasy character name for a {race}.
+
+            STRICT RULES:
+            - Only output the name
+            - No explanations
+            - No extra text
+            - 1–3 words maximum
+            - Must sound like a person, not a place or object
+            """
+        }]
     )
-    return response.choices[0].message.content.strip()
+
+    name = response.choices[0].message.content.strip()
+
+    # 🧹 Clean up bad outputs
+    name = name.split("\n")[0]  # remove extra lines
+
+    # 🚫 Reject bad responses
+    bad_words = ["catacombs", "dungeon", "temple", "fortress", "cave"]
+    if any(word in name.lower() for word in bad_words):
+        return "Arin Valeth"  # fallback safe name
+
+    return name
 
 
 def generate_stats():
