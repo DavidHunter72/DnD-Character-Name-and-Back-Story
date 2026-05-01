@@ -112,12 +112,46 @@ if st.button("📜 Generate Full Character"):
         with st.spinner("Painting your character..."):
          image = generate_portrait(name, race, char_class)
 
-if image:
-    st.image(image, caption=f"{name} the {race} {char_class}")
-else:
-    st.warning("Could not generate portrait (API or quota issue).") 
+if st.button("📜 Generate Full Character"):
+    if name and race and char_class:
 
-        # 📜 Show story
+        with st.spinner("Forging your character..."):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": f"""
+                    Create a detailed Dungeons & Dragons character.
+
+                    Name: {name}
+                    Race: {race}
+                    Class: {char_class}
+                    Background: {background}
+                    Traits: {traits}
+
+                    Include:
+                    - Origin story
+                    - Personality
+                    - Motivation
+                    - A unique plot hook
+                    """
+                }]
+            )
+
+            story = response.choices[0].message.content
+
+        # 🎨 Portrait
+        st.subheader("🎨 Character Portrait")
+
+        with st.spinner("Painting your character..."):
+            image = generate_portrait(name, race, char_class)
+
+        if image:
+            st.image(image, caption=f"{name} the {race} {char_class}")
+        else:
+            st.warning("Could not generate portrait.")
+
+        # 📜 Story
         st.subheader("✨ Your Character")
         st.write(story)
 
