@@ -47,13 +47,17 @@ st.markdown("""
 # 🎲 FUNCTIONS
 # -----------------------------
 
-def generate_name(race):
-    prompt = f"Generate one fantasy character name for a {race}. Only output the name."
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return res.choices[0].message.content.strip().split("\n")[0]
+# Initialize once
+if "name" not in st.session_state:
+    st.session_state.name = ""
+
+# Generate button
+if st.button("🎲 Generate Name"):
+    if race:
+        st.session_state.name = generate_name(race)
+
+# Text input (linked to session state)
+name = st.text_input("Name", key="name")
 
 
 def generate_stats():
