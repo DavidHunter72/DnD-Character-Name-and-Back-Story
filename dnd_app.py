@@ -1,31 +1,37 @@
 import streamlit as st
 from openai import OpenAI
+import random
 import base64
 from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
-# -------------------------------
-# 🔐 API
-# -------------------------------
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
+# -----------------------------
+# 🔐 CONFIG
+# -----------------------------
 st.set_page_config(page_title="D&D Character Generator", page_icon="🧙")
 
-# -------------------------------
+api_key = st.secrets.get("OPENAI_API_KEY")
+if not api_key:
+    st.error("Missing OpenAI API key")
+    st.stop()
+
+client = OpenAI(api_key=api_key)
+
+# -----------------------------
 # 🎨 STYLING
-# -------------------------------
+# -----------------------------
 st.markdown("""
 <style>
 [data-testid="stAppViewContainer"] {
     background-image: url("https://images.unsplash.com/photo-1518709268805-4e9042af2176");
     background-size: cover;
-    background-attachment: fixed;
 }
 [data-testid="stAppViewContainer"]::before {
     content: "";
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.6);
-    z-index: -1;
 }
 .card {
     background: rgba(20,20,30,0.9);
@@ -33,66 +39,30 @@ st.markdown("""
     border-radius: 15px;
     border: 2px solid #c9a96e;
 }
-.title {
-    font-size: 28px;
-    color: #f5d27a;
-    font-weight: bold;
-}
-.sub {
-    color: #ddd;
-}
+.title { color: #f5d27a; font-size: 26px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------------
+# -----------------------------
 # 🎲 FUNCTIONS
-# -------------------------------
+# -----------------------------
+
 def generate_name(race):
-    response = client.chat.completions.create(
+    prompt = f"Generate one fantasy character name for a {race}. Only output the name."
+    res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": f"""
-            Generate ONE fantasy character name for a {race}.
-
-            STRICT RULES:
-            - Only output the name
-            - No explanations
-            - No extra text
-            - 1–3 words maximum
-            - Must sound like a person, not a place or object
-            """
-        }]
+        messages=[{"role": "user", "content": prompt}]
     )
-
-    name = response.choices[0].message.content.strip()
-
-    # 🧹 Clean up bad outputs
-    name = name.split("\n")[0]  # remove extra lines
-
-    # 🚫 Reject bad responses
-    bad_words = ["catacombs", "dungeon", "temple", "fortress", "cave"]
-    if any(word in name.lower() for word in bad_words):
-        return "Arin Valeth"  # fallback safe name
-
-    return name
+    return res.choices[0].message.content.strip().split("\n")[0]
 
 
 def generate_stats():
-    import random
-    return {
-        "STR": random.randint(8, 18),
-        "DEX": random.randint(8, 18),
-        "CON": random.randint(8, 18),
-        "INT": random.randint(8, 18),
-        "WIS": random.randint(8, 18),
-        "CHA": random.randint(8, 18),
-    }
+    return {k: random.randint(8, 18) for k in ["STR","DEX","CON","INT","WIS","CHA"]}
 
 
 def generate_story(name, race, char_class, background, traits):
     prompt = f"""
-    Create a detailed Dungeons & Dragons character.
+    Create a D&D character.
 
     Name: {name}
     Race: {race}
@@ -100,111 +70,168 @@ def generate_story(name, race, char_class, background, traits):
     Background: {background}
     Traits: {traits}
 
-    Include origin, personality, motivation, and a plot hook.
+    Include origin, personality, and motivation.
     """
-    response = client.chat.completions.create(
+    res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role":"user","content":prompt}]
     )
-    return response.choices[0].message.content
+    return res.choices[0].message.content
 
 
 def generate_portrait(name, race, char_class):
     try:
-        result = client.images.generate(
+        img = client.images.generate(
             model="gpt-image-1",
-            prompt=f"fantasy portrait of {name}, a {race} {char_class}, D&D style",
+            prompt=f"fantasy portrait of {name}, a {race} {char_class}",
             size="512x512"
         )
-        img = base64.b64decode(result.data[0].b64_json)
-        return img
+        return base64.b64decode(img.data[0].b64_json)
     except:
         return None
 
 
-# -------------------------------
-# 🖥️ UI INPUTS
-# -------------------------------
+def generate_equipment(char_class):
+    base = ["Backpack","Torch","Rations","Waterskin"]
+    class_items = {
+        "fighter":["Longsword","Shield","Chain Mail"],
+        "wizard":["Spellbook","Staff"],
+        "rogue":["Dagger","Thieves’ Tools"],
+    }
+    gear = class_items.get(char_class.lower(), ["Dagger"]) + base
+    gold = random.randint(10,150)
+    magic = ["Potion of Healing"] if random.random() < 0.4 else []
+    return gear, gold, magic
 
-st.title("🧙 AI D&D Character Creator")
+
+def get_spell_slots(char_class, level):
+    if char_class.lower() not in ["wizard","cleric","sorcerer"]:
+        return None
+    return {"Level 1": min(4, level+1), "Level 2": max(0, level-2)}
+
+
+def generate_spells(char_class):
+    if char_class.lower() not in ["wizard","cleric","sorcerer"]:
+        return []
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"user","content":f"List 5 spells for a {char_class}. Names only."}]
+    )
+    return [s.strip("- ") for s in res.choices[0].message.content.split("\n") if s]
+
+
+def calculate_hp(char_class, level, con):
+    hit_die = {"fighter":10,"wizard":6,"rogue":8}
+    return hit_die.get(char_class.lower(),8)*level + (con-10)
+
+
+def create_pdf(name, race, char_class, level, hp, stats, gear, spells, story):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+    content = []
+
+    content.append(Paragraph(f"<b>{name}</b>", styles["Title"]))
+    content.append(Paragraph(f"{race} {char_class} (Level {level})", styles["Normal"]))
+    content.append(Spacer(1,10))
+
+    content.append(Paragraph(f"HP: {hp}", styles["Normal"]))
+
+    for k,v in stats.items():
+        content.append(Paragraph(f"{k}: {v}", styles["Normal"]))
+
+    content.append(Spacer(1,10))
+    content.append(Paragraph("Equipment:", styles["Heading2"]))
+    for item in gear:
+        content.append(Paragraph(f"- {item}", styles["Normal"]))
+
+    if spells:
+        content.append(Paragraph("Spells:", styles["Heading2"]))
+        for s in spells:
+            content.append(Paragraph(f"- {s}", styles["Normal"]))
+
+    content.append(Spacer(1,10))
+    content.append(Paragraph("Backstory:", styles["Heading2"]))
+    content.append(Paragraph(story, styles["Normal"]))
+
+    doc.build(content)
+    buffer.seek(0)
+    return buffer
+
+# -----------------------------
+# 🖥️ UI
+# -----------------------------
+st.title("🧙 D&D Character Generator")
 
 race = st.text_input("Race")
 char_class = st.text_input("Class")
 background = st.text_input("Background")
 traits = st.text_area("Traits")
 
-if st.button("🎲 Generate Name"):
+if st.button("🎲 Generate Name", key="name"):
     if race:
         st.session_state["name"] = generate_name(race)
 
-name = st.text_input("Name", value=st.session_state.get("name", ""))
-
+name = st.text_input("Name", value=st.session_state.get("name",""))
 level = st.slider("Level", 1, 20, 1)
 
-# -------------------------------
-# 📜 GENERATE CHARACTER
-# -------------------------------
+# -----------------------------
+# 🚀 GENERATE
+# -----------------------------
+if st.button("📜 Generate Character", key="char"):
 
-if st.button("📜 Generate Character", key="gen_char"):
-    if name and race and char_class:
+    if not (name and race and char_class):
+        st.warning("Fill required fields")
+        st.stop()
 
-        with st.spinner("Generating character..."):
-            story = generate_story(name, race, char_class, background, traits)
-            stats = generate_stats()
-            hp = stats["CON"] * level
-            image = generate_portrait(name, race, char_class)
+    with st.spinner("Generating..."):
+        stats = generate_stats()
+        story = generate_story(name, race, char_class, background, traits)
+        gear, gold, magic = generate_equipment(char_class)
+        spells = generate_spells(char_class)
+        slots = get_spell_slots(char_class, level)
+        hp = calculate_hp(char_class, level, stats["CON"])
+        image = generate_portrait(name, race, char_class)
 
-        # -------------------------------
-        # 🎴 CHARACTER CARD
-        # -------------------------------
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+    # 🎴 DISPLAY
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        st.markdown(f'<div class="title">{name}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="sub">{race} {char_class} | Level {level}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="title">{name}</div>', unsafe_allow_html=True)
+    st.write(f"{race} {char_class} | Level {level} | HP {hp} | Gold {gold}")
 
-        st.markdown("---")
+    col1, col2 = st.columns([1,2])
 
-        col1, col2 = st.columns([1,2])
+    with col1:
+        if image:
+            st.image(image)
+    with col2:
+        st.write(story)
 
-        with col1:
-            if image:
-                st.image(image)
-            else:
-                st.image("https://via.placeholder.com/300x400?text=No+Portrait")
+    st.markdown("### 📊 Stats")
+    st.write(stats)
 
-            st.markdown(f"**❤️ HP:** {hp}")
+    st.markdown("### ⚔️ Equipment")
+    st.write(gear)
 
-            st.markdown("### 📊 Stats")
-            for k, v in stats.items():
-                st.write(f"{k}: {v}")
+    if magic:
+        st.markdown("### ✨ Magic Items")
+        st.write(magic)
 
-        with col2:
-            st.markdown("### 📜 Backstory")
-            st.write(story)
+    if slots:
+        st.markdown("### 🧙 Spell Slots")
+        st.write(slots)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    if spells:
+        st.markdown("### 📖 Spells")
+        st.write(spells)
 
-        # -------------------------------
-        # 📄 DOWNLOAD
-        # -------------------------------
-        file_content = f"""
-        {name}
-        {race} {char_class} (Level {level})
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        HP: {hp}
+    # 📄 PDF
+    pdf = create_pdf(name, race, char_class, level, hp, stats, gear, spells, story)
 
-        Stats:
-        {stats}
-
-        Backstory:
-        {story}
-        """
-
-        st.download_button(
-            "📄 Download Character Sheet",
-            data=file_content,
-            file_name=f"{name}_character.txt"
-        )
-
-    else:
-        st.warning("Fill in name, race, and class.")
+    st.download_button(
+        "📄 Download PDF",
+        pdf,
+        file_name=f"{name}.pdf"
+    )
