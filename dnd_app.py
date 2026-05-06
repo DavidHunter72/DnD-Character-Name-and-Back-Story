@@ -180,8 +180,8 @@ def generate_stats(cls):
         base["CON"] += random.randint(2, 4)
         
     elif cls == "barbarian":
-    base["STR"] += random.randint(4, 6)
-    base["CON"] += random.randint(4, 6)
+        base["STR"] += random.randint(4, 6)
+        base["CON"] += random.randint(4, 6)
     
     for k in base:
         base[k] = min(base[k], 20)
