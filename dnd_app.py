@@ -96,6 +96,11 @@ def spells(cls):
             n,d=l.split("-",1)
             out.append({"name":n.strip(),"desc":d.strip()})
     return out
+    
+POINT_COST = {
+    8: 0, 9: 1, 10: 2, 11: 3,
+    12: 4, 13: 5, 14: 7, 15: 9
+}
 
 def portrait(name, race, cls):
     try:
@@ -214,18 +219,47 @@ if st.session_state.page == "builder":
 
     name = st.text_input("Name", key="name")
     lvl = st.slider("Level", 1, 20, 1)
+mode = st.radio(
+    "Stat Generation Mode",
+    ["Auto (Class Optimized)", "Manual (Point Buy)"]
+)
 
+manual_stats = {}
+
+if mode == "Manual (Point Buy)":
+
+    st.markdown("### Assign Stats (Point Buy)")
+
+    total_cost = 0
+
+    for stat in ["STR","DEX","CON","INT","WIS","CHA"]:
+        val = st.slider(stat, 8, 15, 8, key=stat)
+        manual_stats[stat] = val
+        total_cost += POINT_COST[val]
+
+    st.write(f"Points Used: {total_cost} / 27")
+
+    if total_cost > 27:
+        st.error("Too many points!")
+        
     if st.button("📜 Generate Character"):
 
-        char_name = st.session_state.name
+    char_name = st.session_state.name
 
-        if not (char_name and race and cls):
-            st.warning("Fill all fields")
+    if not (char_name and race and cls):
+        st.warning("Fill all fields")
+        st.stop()
+
+    # 🎯 Choose mode
+    if mode == "Auto (Class Optimized)":
+        stats = auto_stats(cls)
+    else:
+        if total_cost > 27:
+            st.warning("Fix point allocation")
             st.stop()
+        stats = manual_stats
 
-        # ✅ NOW correctly inside block
-        stats = generate_stats(cls)
-        hp = hp_calc(cls, lvl, stats["CON"])
+    hp = hp_calc(cls, lvl, stats["CON"])
 
         c = {
             "name": char_name,
