@@ -159,7 +159,7 @@ if st.session_state.page == "builder":
             st.warning("Fill all fields")
             st.stop()
     stats = generate_stats(cls)
-       def generate_stats(cls):
+      def generate_stats(cls):
     base = {
         "STR": random.randint(8, 12),
         "DEX": random.randint(8, 12),
@@ -191,7 +191,6 @@ if st.session_state.page == "builder":
         base["CHA"] += random.randint(4, 6)
         base["CON"] += random.randint(2, 4)
 
-    # Cap stats at 20 (D&D rule)
     for k in base:
         base[k] = min(base[k], 20)
 
