@@ -181,12 +181,15 @@ if st.session_state.page=="builder":
             for k,v in BACKGROUND_BONUSES[bg_choice].items():
                 stats[k]+=v
 
-        hp=hp_calc(cls,lvl,stats["CON"])
-        story=generate_story(name,race,cls)
-        spells=generate_spells(cls)
-        gear,gold=equipment(cls)
-        img=portrait(name,race,cls)
-        tags=roleplay_tags(name,race,cls)
+      # ✅ lock name from session state
+char_name = st.session_state.name
+
+hp = hp_calc(cls, lvl, stats["CON"])
+story = generate_story(char_name, race, cls)
+spells = generate_spells(cls)
+gear, gold = equipment(cls)
+img = portrait(char_name, race, cls)
+tags = roleplay_tags(char_name, race, cls)
 
         if bg_choice=="AI Generated":
             bg=generate_background(race,cls)
@@ -194,7 +197,7 @@ if st.session_state.page=="builder":
             bg=str(OFFICIAL_BACKGROUNDS[bg_choice])
 
         st.session_state.character={
-            "name":name,"race":race,"class":cls,"level":lvl,
+            "name":char_name,"race":race,"class":cls,"level":lvl,
             "stats":stats,"hp":hp,"gear":gear,"gold":gold,
             "spells":spells,"story":story,"image":img,
             "background":bg,"tags":tags
