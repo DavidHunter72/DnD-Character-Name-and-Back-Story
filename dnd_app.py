@@ -200,9 +200,9 @@ if st.session_state.page == "builder":
     lvl = st.slider("Level", 1, 20, 1)
 
     # Generate character
-  if st.button("📜 Generate Character"):
+    if st.button("📜 Generate Character"):
 
-    char_name = st.session_state.name
+        char_name = st.session_state.name
 
     if not (char_name and race and cls):
         st.warning("Fill in Name, Race, and Class")
