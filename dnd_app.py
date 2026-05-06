@@ -244,7 +244,7 @@ if mode == "Manual (Point Buy)":
         
     if st.button("📜 Generate Character"):
 
-    char_name = st.session_state.name
+        char_name = st.session_state.name
 
     if not (char_name and race and cls):
         st.warning("Fill all fields")
