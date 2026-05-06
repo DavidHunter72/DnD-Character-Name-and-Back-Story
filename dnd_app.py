@@ -200,54 +200,50 @@ if st.session_state.page == "builder":
     lvl = st.slider("Level", 1, 20, 1)
 
     # Generate character
-    if st.button("📜 Generate Character"):
+     if st.button("📜 Generate Character"):
 
-        char_name = st.session_state.name
+    char_name = st.session_state.name
 
-        if not (char_name and race and cls):
-            st.warning("Fill in Name, Race, and Class")
-            st.stop()
+    if not (char_name and race and cls):
+        st.warning("Fill in Name, Race, and Class")
+        st.stop()
 
-        stats = generate_stats()
+    stats = generate_stats()
 
-        # Apply background bonuses
-        if bg_choice in BACKGROUND_BONUSES:
-            for k, v in BACKGROUND_BONUSES[bg_choice].items():
-                stats[k] += v
+    if bg_choice in BACKGROUND_BONUSES:
+        for k, v in BACKGROUND_BONUSES[bg_choice].items():
+            stats[k] += v
 
-        hp = hp_calc(cls, lvl, stats["CON"])
+    hp = hp_calc(cls, lvl, stats["CON"])
 
-       char_name = st.session_state.name
+    story = generate_story(char_name, race, cls)
+    spells = generate_spells(cls)
+    gear, gold = equipment(cls)
+    img = portrait(char_name, race, cls)
+    tags = roleplay_tags(char_name, race, cls)
 
-        story = generate_story(char_name, race, cls)
-        img = portrait(char_name, race, cls)
-        spells = generate_spells(cls)
-        gear, gold = equipment(cls)
-                tags = roleplay_tags(char_name, race, cls)
+    if bg_choice == "AI Generated":
+        bg = generate_background(race, cls)
+    else:
+        bg = str(OFFICIAL_BACKGROUNDS[bg_choice])
 
-        # Background
-        if bg_choice == "AI Generated":
-            bg = generate_background(race, cls)
-        else:
-            bg = str(OFFICIAL_BACKGROUNDS[bg_choice])
+    st.session_state.character = {
+        "name": char_name,
+        "race": race,
+        "class": cls,
+        "level": lvl,
+        "stats": stats,
+        "hp": hp,
+        "gear": gear,
+        "gold": gold,
+        "spells": spells,
+        "story": story,
+        "image": img,
+        "background": bg,
+        "tags": tags
+    }
 
-        st.session_state.character = {
-            "name": st.session_state.name,
-            "race": race,
-            "class": cls,
-            "level": lvl,
-            "stats": stats,
-            "hp": hp,
-            "gear": gear,
-            "gold": gold,
-            "spells": spells,
-            "story": story,
-            "image": img,
-            "background": bg,
-            "tags": tags
-        }
-
-        st.success("Character Ready → Sheet")
+    st.success("Character Ready → Sheet")
 
 # -----------------------------
 # SHEET
