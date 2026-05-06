@@ -74,7 +74,7 @@ def generate_stats():
     return {k: random.randint(8,18) for k in ["STR","DEX","CON","INT","WIS","CHA"]}
 
 def hp_calc(cls, lvl, con):
-    base = {"fighter":10,"rogue":8,"wizard":6}
+    base = {"fighter":10,"rogue":8,"wizard":6, "barbarian":12, "sorcerer": 6}
     return base.get(cls.lower(),8)*lvl + mod(con)*lvl
 
 def story(name,race,cls):
@@ -97,15 +97,40 @@ def spells(cls):
             out.append({"name":n.strip(),"desc":d.strip()})
     return out
 
-def portrait(name,race,cls):
+def portrait(name, race, cls):
     try:
+        cls_lower = cls.lower()
+
+        # 🎯 Class-specific styling
+        class_style = {
+            "barbarian": "massive muscular warrior, fur armor, war paint, savage expression",
+            "fighter": "armored knight, battle-worn steel armor, heroic stance",
+            "rogue": "hooded assassin, leather armor, daggers, shadows",
+            "wizard": "arcane mage, glowing runes, mystical robes, magic aura",
+            "cleric": "holy warrior, radiant light, divine armor, glowing symbol",
+            "sorcerer": "wild magic user, energy swirling, glowing hands",
+        }
+
+        style = class_style.get(cls_lower, "fantasy adventurer")
+
+        prompt = f"""
+        Epic high fantasy character portrait of {name}, a {race} {cls}.
+        {style}.
+        Ultra detailed, cinematic lighting, dramatic shadows,
+        sharp focus, concept art, Dungeons and Dragons style,
+        4k digital painting, artstation quality, highly detailed face.
+        """
+
         img = client.images.generate(
             model="gpt-image-1",
-            prompt=f"fantasy portrait of {name}, {race} {cls}, cinematic lighting",
-            size="512x512"
+            prompt=prompt,
+            size="1024x1024"
         )
+
         return base64.b64decode(img.data[0].b64_json)
-    except:
+
+    except Exception as e:
+        print("IMAGE ERROR:", e)
         return None
 
 def pdf(c):
@@ -153,7 +178,11 @@ def generate_stats(cls):
     elif cls == "sorcerer":
         base["CHA"] += random.randint(4, 6)
         base["CON"] += random.randint(2, 4)
-
+        
+    elif cls == "barbarian":
+    base["STR"] += random.randint(4, 6)
+    base["CON"] += random.randint(4, 6)
+    
     for k in base:
         base[k] = min(base[k], 20)
 
