@@ -251,37 +251,92 @@ if st.session_state.page == "builder":
 # SHEET
 # -----------------------------
 else:
-    c=st.session_state.get("character")
+    c = st.session_state.get("character")
 
     if not c:
         st.warning("No character yet")
     else:
-        st.title(c["name"])
-        st.write(f"{c['race']} {c['class']} Level {c['level']}")
 
-      if c["image"]:
-        st.image(c["image"])
-    else:
-        st.image("https://images.unsplash.com/photo-1608889175123-8ee362201f81")
+        # HEADER
+        st.markdown(f"""
+        <div class="card">
+            <div class="title">{c['name']}</div>
+            <div>{c['race']} {c['class']} • Level {c['level']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("### Stats")
-        for k,v in c["stats"].items():
-            st.write(f"{k}: {v} (mod {mod(v)})")
+        # TOP SECTION
+        col1, col2 = st.columns([1, 2])
 
-        st.write(f"HP: {c['hp']} | Gold: {c['gold']}")
+        with col1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        st.markdown("### Equipment")
-        st.write(c["gear"])
+            if c["image"]:
+                st.image(c["image"])
+            else:
+                st.image("https://images.unsplash.com/photo-1608889175123-8ee362201f81")
 
-        st.markdown("### Spells")
-        for s in c["spells"]:
-            st.write(f"{s['name']} - {s['desc']}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("### Background")
+        with col2:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Stats</div>', unsafe_allow_html=True)
+
+            stat_cols = st.columns(3)
+            i = 0
+
+            for k, v in c["stats"].items():
+                with stat_cols[i % 3]:
+                    st.markdown(f"""
+                    <div class="stat">
+                        <b>{k}</b><br>
+                        {v} (mod {mod(v)})
+                    </div>
+                    """, unsafe_allow_html=True)
+                i += 1
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # CORE INFO
+        st.markdown(f"""
+        <div class="card">
+            <b>HP:</b> {c['hp']} &nbsp;&nbsp; | &nbsp;&nbsp;
+            <b>Gold:</b> {c['gold']}
+        </div>
+        """, unsafe_allow_html=True)
+
+        # EQUIPMENT + SPELLS
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Equipment</div>', unsafe_allow_html=True)
+
+            for g in c["gear"]:
+                st.write(f"• {g}")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with col4:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Spells</div>', unsafe_allow_html=True)
+
+            for s in c["spells"]:
+                st.write(f"**{s['name']}** — {s['desc']}")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # BACKGROUND
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+
+        st.markdown('<div class="section-title">Background</div>', unsafe_allow_html=True)
         st.write(c["background"])
 
-        st.markdown("### Roleplay")
+        st.markdown('<div class="section-title">Roleplay</div>', unsafe_allow_html=True)
         st.write(c["tags"])
 
-        pdf=make_pdf(c)
-        st.download_button("📄 Download PDF",pdf,file_name=f"{c['name']}.pdf")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # PDF DOWNLOAD
+        pdf = make_pdf(c)
+        st.download_button("📄 Download Character Sheet", pdf, file_name=f"{c['name']}.pdf")
