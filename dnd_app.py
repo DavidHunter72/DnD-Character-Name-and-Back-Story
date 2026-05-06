@@ -244,13 +244,13 @@ if mode == "Manual (Point Buy)":
         
     if st.button("📜 Generate Character"):
 
-        char_name = st.session_state.name
+    char_name = st.session_state.name
 
     if not (char_name and race and cls):
         st.warning("Fill all fields")
         st.stop()
 
-    # 🎯 Choose mode
+    # Choose stat mode
     if mode == "Auto (Class Optimized)":
         stats = auto_stats(cls)
     else:
@@ -261,20 +261,25 @@ if mode == "Manual (Point Buy)":
 
     hp = hp_calc(cls, lvl, stats["CON"])
 
-        c = {
-            "name": char_name,
-            "race": race,
-            "class": cls,
-            "level": lvl,
-            "stats": stats,
-            "hp": hp,
-            "spells": spells(cls),
-            "story": story(char_name, race, cls),
-            "image": portrait(char_name, race, cls)
-        }
+    gear, gold = equipment(cls)
 
-        st.session_state.character = c
-        st.success("Character Created → Sheet")
+    # ✅ SAME INDENT LEVEL AS hp, stats, etc.
+    c = {
+        "name": char_name,
+        "race": race,
+        "class": cls,
+        "level": lvl,
+        "stats": stats,
+        "hp": hp,
+        "gear": gear,
+        "gold": gold,
+        "spells": spells(cls),
+        "story": story(char_name, race, cls),
+        "image": portrait(char_name, race, cls)
+    }
+
+    st.session_state.character = c
+    st.success("Character Created → Sheet")
 
 # -----------------------------
 # SHEET
