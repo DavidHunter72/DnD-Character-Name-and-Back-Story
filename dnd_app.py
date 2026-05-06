@@ -122,44 +122,7 @@ def pdf(c):
     doc.build(elems)
     buf.seek(0)
     return buf
-
-# -----------------------------
-# NAV
-# -----------------------------
-colA,colB = st.columns(2)
-with colA:
-    if st.button("🛠 Builder"):
-        st.session_state.page="builder"
-with colB:
-    if st.button("🎴 Sheet"):
-        st.session_state.page="sheet"
-
-# -----------------------------
-# BUILDER
-# -----------------------------
-if st.session_state.page == "builder":
-
-    st.title("🧙 Character Builder")
-
-    race = st.text_input("Race")
-    cls = st.text_input("Class")
-
-    if st.button("🎲 Generate Name"):
-        if race:
-            st.session_state.name = generate_name(race)
-
-    name = st.text_input("Name", key="name")
-    lvl = st.slider("Level",1,20,1)
-
-    if st.button("📜 Generate Character"):
-
-        char_name = st.session_state.name
-
-        if not (char_name and race and cls):
-            st.warning("Fill all fields")
-            st.stop()
-    stats = generate_stats(cls)
-      def generate_stats(cls):
+def generate_stats(cls):
     base = {
         "STR": random.randint(8, 12),
         "DEX": random.randint(8, 12),
@@ -195,6 +158,45 @@ if st.session_state.page == "builder":
         base[k] = min(base[k], 20)
 
     return base
+# -----------------------------
+# NAV
+# -----------------------------
+colA,colB = st.columns(2)
+with colA:
+    if st.button("🛠 Builder"):
+        st.session_state.page="builder"
+with colB:
+    if st.button("🎴 Sheet"):
+        st.session_state.page="sheet"
+
+# -----------------------------
+# BUILDER
+# -----------------------------
+if st.session_state.page == "builder":
+
+    st.title("🧙 Character Builder")
+
+    race = st.text_input("Race")
+    cls = st.text_input("Class")
+
+    if st.button("🎲 Generate Name"):
+        if race:
+            st.session_state.name = generate_name(race)
+
+    name = st.text_input("Name", key="name")
+    lvl = st.slider("Level", 1, 20, 1)
+
+    if st.button("📜 Generate Character"):
+
+        char_name = st.session_state.name
+
+        if not (char_name and race and cls):
+            st.warning("Fill all fields")
+            st.stop()
+
+        # ✅ NOW correctly inside block
+        stats = generate_stats(cls)
+        hp = hp_calc(cls, lvl, stats["CON"])
 
         c = {
             "name": char_name,
@@ -204,8 +206,8 @@ if st.session_state.page == "builder":
             "stats": stats,
             "hp": hp,
             "spells": spells(cls),
-            "story": story(char_name,race,cls),
-            "image": portrait(char_name,race,cls)
+            "story": story(char_name, race, cls),
+            "image": portrait(char_name, race, cls)
         }
 
         st.session_state.character = c
