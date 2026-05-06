@@ -125,11 +125,16 @@ if st.button("📜 Generate Character", key="gen_char_btn"):
         story = generate_story(name, race, char_class, background, traits)
         gear, gold = generate_equipment(char_class)
         spells = generate_spells(char_class)
+        image = generate_portrait(name, race, char_class)
 
     # -----------------------------
     # 🎴 DISPLAY
     # -----------------------------
     st.subheader(f"{name} — Level {level} {race} {char_class}")
+    if image:
+    st.image(image, caption=f"{name} the {race} {char_class}")
+else:
+    st.info("Portrait unavailable (API or quota issue)")
 
     col1, col2 = st.columns(2)
 
@@ -149,7 +154,50 @@ if st.button("📜 Generate Character", key="gen_char_btn"):
         st.markdown("### 📜 Backstory")
         st.write(story)
 
+
+        import base64
+
+def generate_portrait(name, race, char_class):
+    try:
+        result = client.images.generate(
+            model="gpt-image-1",
+            prompt=f"fantasy portrait of {name}, a {race} {char_class}, dnd style, detailed",
+            size="512x512"
+        )
+        image_base64 = result.data[0].b64_json
+        return base64.b64decode(image_base64)
+    except:
+        return None  # prevents crash if API fails
         if spells:
             st.markdown("### 🧙 Spells")
             for spell in spells:
                 st.write(f"✨ {spell}")
+
+sheet = f"""
+=== D&D CHARACTER SHEET ===
+
+Name: {name}
+Race: {race}
+Class: {char_class}
+Level: {level}
+
+HP: {hp}
+Gold: {gold}
+
+--- STATS ---
+{stats}
+
+--- EQUIPMENT ---
+{chr(10).join(gear)}
+
+--- SPELLS ---
+{chr(10).join(spells) if spells else "None"}
+
+--- BACKSTORY ---
+{story}
+"""
+st.download_button(
+    "📄 Download Character Sheet",
+    data=sheet,
+    file_name=f"{name}_character.txt"
+)
