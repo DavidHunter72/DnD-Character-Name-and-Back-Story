@@ -202,7 +202,7 @@ if st.session_state.page == "builder":
     # Generate character
     if st.button("📜 Generate Character"):
 
-    char_name = st.session_state.name
+        char_name = st.session_state.name
 
     if not (char_name and race and cls):
         st.warning("Fill in Name, Race, and Class")
