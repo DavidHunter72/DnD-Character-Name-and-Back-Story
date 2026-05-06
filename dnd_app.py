@@ -217,11 +217,13 @@ if st.session_state.page == "builder":
 
         hp = hp_calc(cls, lvl, stats["CON"])
 
+       char_name = st.session_state.name
+
         story = generate_story(char_name, race, cls)
+        img = portrait(char_name, race, cls)
         spells = generate_spells(cls)
         gear, gold = equipment(cls)
-        img = portrait(char_name, race, cls)
-        tags = roleplay_tags(char_name, race, cls)
+                tags = roleplay_tags(char_name, race, cls)
 
         # Background
         if bg_choice == "AI Generated":
@@ -230,7 +232,7 @@ if st.session_state.page == "builder":
             bg = str(OFFICIAL_BACKGROUNDS[bg_choice])
 
         st.session_state.character = {
-            "name": char_name,
+            "name": st.session_state.name,
             "race": race,
             "class": cls,
             "level": lvl,
