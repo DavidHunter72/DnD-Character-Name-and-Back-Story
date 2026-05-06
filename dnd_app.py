@@ -158,9 +158,44 @@ if st.session_state.page == "builder":
         if not (char_name and race and cls):
             st.warning("Fill all fields")
             st.stop()
+    stats = generate_stats(cls)
+       def generate_stats(cls):
+    base = {
+        "STR": random.randint(8, 12),
+        "DEX": random.randint(8, 12),
+        "CON": random.randint(8, 12),
+        "INT": random.randint(8, 12),
+        "WIS": random.randint(8, 12),
+        "CHA": random.randint(8, 12),
+    }
 
-        stats = generate_stats()
-        hp = hp_calc(cls,lvl,stats["CON"])
+    cls = cls.lower()
+
+    if cls == "fighter":
+        base["STR"] += random.randint(4, 6)
+        base["CON"] += random.randint(2, 4)
+
+    elif cls == "rogue":
+        base["DEX"] += random.randint(4, 6)
+        base["INT"] += random.randint(2, 4)
+
+    elif cls == "wizard":
+        base["INT"] += random.randint(4, 6)
+        base["DEX"] += random.randint(2, 4)
+
+    elif cls == "cleric":
+        base["WIS"] += random.randint(4, 6)
+        base["CON"] += random.randint(2, 4)
+
+    elif cls == "sorcerer":
+        base["CHA"] += random.randint(4, 6)
+        base["CON"] += random.randint(2, 4)
+
+    # Cap stats at 20 (D&D rule)
+    for k in base:
+        base[k] = min(base[k], 20)
+
+    return base
 
         c = {
             "name": char_name,
