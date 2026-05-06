@@ -7,6 +7,26 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
+
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background-image: url("https://images.unsplash.com/photo-1518709268805-4e9042af2176");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+}
+
+/* dark overlay */
+[data-testid="stAppViewContainer"]::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: -1;
+}
+</style>
+""", unsafe_allow_html=True)
 # -----------------------------
 # CONFIG
 # -----------------------------
@@ -95,15 +115,17 @@ def roleplay_tags(name,race,cls):
     )
     return res.choices[0].message.content
 
-def portrait(name,race,cls):
+def portrait(name, race, cls):
     try:
         img = client.images.generate(
             model="gpt-image-1",
-            prompt=f"epic fantasy portrait of {name}, {race} {cls}, cinematic lighting",
+            prompt=f"epic fantasy portrait of {name}, {race} {cls}, D&D style, highly detailed",
             size="512x512"
         )
         return base64.b64decode(img.data[0].b64_json)
-    except:
+
+    except Exception as e:
+        print("IMAGE ERROR:", e)  # shows in logs
         return None
 
 def equipment(cls):
@@ -237,8 +259,10 @@ else:
         st.title(c["name"])
         st.write(f"{c['race']} {c['class']} Level {c['level']}")
 
-        if c["image"]:
-            st.image(c["image"])
+      if c["image"]:
+        st.image(c["image"])
+    else:
+        st.image("https://images.unsplash.com/photo-1608889175123-8ee362201f81")
 
         st.markdown("### Stats")
         for k,v in c["stats"].items():
