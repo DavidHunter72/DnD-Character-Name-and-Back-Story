@@ -8,19 +8,14 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
 # -----------------------------
-# 🔐 CONFIG
+# CONFIG
 # -----------------------------
 st.set_page_config(page_title="D&D Character Generator", page_icon="🧙")
 
-api_key = st.secrets.get("OPENAI_API_KEY")
-if not api_key:
-    st.error("Missing API key")
-    st.stop()
-
-client = OpenAI(api_key=api_key)
+client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY"))
 
 # -----------------------------
-# 🧠 SESSION STATE
+# SESSION STATE
 # -----------------------------
 if "page" not in st.session_state:
     st.session_state.page = "builder"
@@ -29,250 +24,217 @@ if "name" not in st.session_state:
     st.session_state.name = ""
 
 # -----------------------------
-# 🎲 FUNCTIONS
+# DATA
 # -----------------------------
+OFFICIAL_BACKGROUNDS = {
+    "Acolyte": {"skills": ["Insight","Religion"], "tools": ["None"], "feature": "Shelter of the Faithful"},
+    "Criminal": {"skills": ["Deception","Stealth"], "tools": ["Thieves' Tools"], "feature": "Criminal Contact"},
+    "Soldier": {"skills": ["Athletics","Intimidation"], "tools": ["Gaming Set"], "feature": "Military Rank"},
+    "Sage": {"skills": ["Arcana","History"], "tools": ["None"], "feature": "Researcher"},
+}
 
+BACKGROUND_BONUSES = {
+    "Acolyte": {"WIS": 1},
+    "Criminal": {"DEX": 1},
+    "Soldier": {"STR": 1},
+    "Sage": {"INT": 1},
+}
+
+# -----------------------------
+# FUNCTIONS
+# -----------------------------
 def generate_name(race):
     res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": f"Generate ONE fantasy character name for a {race}. Only the name."
-        }]
+        messages=[{"role":"user","content":f"Generate one fantasy name for a {race}. Only name."}]
     )
-    return res.choices[0].message.content.strip().split("\n")[0]
-
+    return res.choices[0].message.content.strip()
 
 def generate_stats():
-    return {k: random.randint(8, 18) for k in ["STR","DEX","CON","INT","WIS","CHA"]}
+    return {k: random.randint(8,18) for k in ["STR","DEX","CON","INT","WIS","CHA"]}
 
+def mod(score):
+    return (score - 10)//2
 
-def stat_modifier(score):
-    return (score - 10) // 2
+def hp_calc(cls, lvl, con):
+    hd = {"fighter":10,"rogue":8,"wizard":6,"cleric":8}
+    return hd.get(cls.lower(),8)*lvl + mod(con)*lvl
 
-
-def calculate_hp(char_class, level, con):
-    hit_die = {"fighter":10,"rogue":8,"wizard":6,"cleric":8}
-    return hit_die.get(char_class.lower(), 8) * level + stat_modifier(con) * level
-
-
-def generate_story(name, race, char_class, background, traits):
-    prompt = f"""
-    Create a D&D character.
-
-    Name: {name}
-    Race: {race}
-    Class: {char_class}
-    Background: {background}
-    Traits: {traits}
-
-    Include origin, personality, motivation, and a plot hook.
-    """
+def generate_story(name,race,cls):
     res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{"role":"user","content":prompt}]
+        messages=[{"role":"user","content":f"Create a short D&D backstory for {name}, a {race} {cls}."}]
     )
     return res.choices[0].message.content
 
-
-def generate_equipment(char_class):
-    base = ["Backpack","Torch","Rations","Waterskin"]
-    class_items = {
-        "fighter":["Longsword","Shield","Chain Mail"],
-        "wizard":["Spellbook","Staff"],
-        "rogue":["Dagger","Thieves’ Tools"],
-    }
-    gear = class_items.get(char_class.lower(), ["Dagger"]) + base
-    gold = random.randint(10,150)
-    return gear, gold
-
-
-def generate_spells(char_class):
-    if char_class.lower() not in ["wizard","cleric","sorcerer"]:
+def generate_spells(cls):
+    if cls.lower() not in ["wizard","cleric","sorcerer"]:
         return []
-
     res = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=[{
-            "role":"user",
-            "content":f"""
-            List 5 D&D spells for a {char_class}.
-            Format:
-            Spell Name - short description
-            """
-        }]
+        messages=[{"role":"user","content":f"List 5 spells for a {cls}. Format: Spell - description"}]
     )
-
-    spells = []
+    spells=[]
     for line in res.choices[0].message.content.split("\n"):
         if "-" in line:
-            name, desc = line.split("-", 1)
-            spells.append({"name": name.strip(), "desc": desc.strip()})
+            n,d=line.split("-",1)
+            spells.append({"name":n.strip(),"desc":d.strip()})
     return spells
 
+def generate_background(race,cls):
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"user","content":f"Create D&D background for {race} {cls}. Include traits, ideal, flaw."}]
+    )
+    return res.choices[0].message.content
 
-def generate_portrait(name, race, char_class):
+def roleplay_tags(name,race,cls):
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role":"user","content":f"Give alignment and personality type for {name}, a {race} {cls}."}]
+    )
+    return res.choices[0].message.content
+
+def portrait(name,race,cls):
     try:
-        result = client.images.generate(
+        img = client.images.generate(
             model="gpt-image-1",
-            prompt=f"""
-            Epic fantasy portrait of {name}, a {race} {char_class}.
-            cinematic lighting, ultra detailed, dnd style, no text
-            """,
+            prompt=f"epic fantasy portrait of {name}, {race} {cls}, cinematic lighting",
             size="512x512"
         )
-        return base64.b64decode(result.data[0].b64_json)
+        return base64.b64decode(img.data[0].b64_json)
     except:
         return None
 
+def equipment(cls):
+    base=["Backpack","Torch","Rations"]
+    gear={"fighter":["Sword","Shield"],"wizard":["Staff","Spellbook"],"rogue":["Dagger","Tools"]}
+    return gear.get(cls.lower(),["Dagger"])+base, random.randint(10,150)
 
-def create_pdf(char):
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer)
-    styles = getSampleStyleSheet()
+def make_pdf(c):
+    buf=BytesIO()
+    doc=SimpleDocTemplate(buf)
+    styles=getSampleStyleSheet()
+    elems=[]
 
-    elements = []
+    elems.append(Paragraph(f"<b>{c['name']}</b>",styles["Title"]))
+    elems.append(Paragraph(f"{c['race']} {c['class']} Level {c['level']}",styles["Normal"]))
+    elems.append(Spacer(1,10))
 
-    elements.append(Paragraph(f"<b>{char['name']}</b>", styles["Title"]))
-    elements.append(Paragraph(f"{char['race']} {char['class']} (Level {char['level']})", styles["Normal"]))
-    elements.append(Spacer(1, 12))
+    data=[["Stat","Score","Mod"]]
+    for k,v in c["stats"].items():
+        data.append([k,v,mod(v)])
+    t=Table(data)
+    t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),1,colors.black)]))
+    elems.append(t)
 
-    # Stats table
-    stats_data = [["Stat", "Score", "Mod"]]
-    for k, v in char["stats"].items():
-        stats_data.append([k, v, stat_modifier(v)])
+    elems.append(Paragraph(f"HP: {c['hp']}",styles["Normal"]))
 
-    table = Table(stats_data)
-    table.setStyle(TableStyle([
-        ("GRID", (0,0), (-1,-1), 1, colors.black),
-        ("BACKGROUND", (0,0), (-1,0), colors.grey),
-    ]))
-    elements.append(table)
+    elems.append(Paragraph("Equipment",styles["Heading2"]))
+    for g in c["gear"]:
+        elems.append(Paragraph(g,styles["Normal"]))
 
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph(f"HP: {char['hp']}", styles["Normal"]))
+    elems.append(Paragraph("Spells",styles["Heading2"]))
+    for s in c["spells"]:
+        elems.append(Paragraph(f"{s['name']}: {s['desc']}",styles["Normal"]))
 
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("Equipment", styles["Heading2"]))
-    for item in char["gear"]:
-        elements.append(Paragraph(f"- {item}", styles["Normal"]))
+    elems.append(Paragraph("Background",styles["Heading2"]))
+    elems.append(Paragraph(c["background"],styles["Normal"]))
 
-    if char["spells"]:
-        elements.append(Spacer(1, 10))
-        elements.append(Paragraph("Spells", styles["Heading2"]))
-        for s in char["spells"]:
-            elements.append(Paragraph(f"{s['name']}: {s['desc']}", styles["Normal"]))
+    elems.append(Paragraph("Roleplay",styles["Heading2"]))
+    elems.append(Paragraph(c["tags"],styles["Normal"]))
 
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("Backstory", styles["Heading2"]))
-    elements.append(Paragraph(char["story"], styles["Normal"]))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
+    doc.build(elems)
+    buf.seek(0)
+    return buf
 
 # -----------------------------
-# 🎮 NAVIGATION
+# NAV
 # -----------------------------
-col1, col2 = st.columns(2)
-
-with col1:
-    if st.button("🛠 Builder"):
-        st.session_state.page = "builder"
-
-with col2:
-    if st.button("🎴 Character Sheet"):
-        st.session_state.page = "sheet"
+if st.button("🛠 Builder"): st.session_state.page="builder"
+if st.button("🎴 Sheet"): st.session_state.page="sheet"
 
 # -----------------------------
-# 🛠 BUILDER PAGE
+# BUILDER
 # -----------------------------
-if st.session_state.page == "builder":
+if st.session_state.page=="builder":
 
     st.title("🧙 Character Builder")
 
-    race = st.text_input("Race")
-    char_class = st.text_input("Class")
-    background = st.text_input("Background")
-    traits = st.text_area("Traits")
+    race=st.text_input("Race")
+    cls=st.text_input("Class")
 
-    if st.button("🎲 Generate Name", key="gen_name"):
+    bg_choice=st.selectbox("Background",["AI Generated"]+list(OFFICIAL_BACKGROUNDS.keys()))
+
+    if st.button("🎲 Generate Name"):
         if race:
-            st.session_state.name = generate_name(race)
+            st.session_state.name=generate_name(race)
 
-    name = st.text_input("Name", key="name")
-    level = st.slider("Level", 1, 20, 1)
+    name=st.text_input("Name",key="name")
+    lvl=st.slider("Level",1,20,1)
 
     if st.button("📜 Generate Character"):
 
-        if not (name and race and char_class):
-            st.warning("Fill required fields")
-            st.stop()
+        stats=generate_stats()
 
-        with st.spinner("Generating..."):
-            stats = generate_stats()
-            hp = calculate_hp(char_class, level, stats["CON"])
-            story = generate_story(name, race, char_class, background, traits)
-            gear, gold = generate_equipment(char_class)
-            spells = generate_spells(char_class)
-            image = generate_portrait(name, race, char_class)
+        if bg_choice in BACKGROUND_BONUSES:
+            for k,v in BACKGROUND_BONUSES[bg_choice].items():
+                stats[k]+=v
 
-        st.session_state.character = {
-            "name": name,
-            "race": race,
-            "class": char_class,
-            "level": level,
-            "hp": hp,
-            "stats": stats,
-            "gear": gear,
-            "gold": gold,
-            "spells": spells,
-            "story": story,
-            "image": image
+        hp=hp_calc(cls,lvl,stats["CON"])
+        story=generate_story(name,race,cls)
+        spells=generate_spells(cls)
+        gear,gold=equipment(cls)
+        img=portrait(name,race,cls)
+        tags=roleplay_tags(name,race,cls)
+
+        if bg_choice=="AI Generated":
+            bg=generate_background(race,cls)
+        else:
+            bg=str(OFFICIAL_BACKGROUNDS[bg_choice])
+
+        st.session_state.character={
+            "name":name,"race":race,"class":cls,"level":lvl,
+            "stats":stats,"hp":hp,"gear":gear,"gold":gold,
+            "spells":spells,"story":story,"image":img,
+            "background":bg,"tags":tags
         }
 
-        st.success("Character created! Go to Character Sheet →")
+        st.success("Character Ready → Sheet")
 
 # -----------------------------
-# 🎴 CHARACTER SHEET PAGE
+# SHEET
 # -----------------------------
-elif st.session_state.page == "sheet":
+else:
+    c=st.session_state.get("character")
 
-    char = st.session_state.get("character")
-
-    if not char:
+    if not c:
         st.warning("No character yet")
     else:
-        st.title(char["name"])
-        st.write(f"{char['race']} {char['class']} | Level {char['level']}")
+        st.title(c["name"])
+        st.write(f"{c['race']} {c['class']} Level {c['level']}")
 
-        if char["image"]:
-            st.image(char["image"])
+        if c["image"]:
+            st.image(c["image"])
 
-        st.markdown("### 📊 Stats")
-        for k, v in char["stats"].items():
-            st.write(f"{k}: {v} (mod {stat_modifier(v)})")
+        st.markdown("### Stats")
+        for k,v in c["stats"].items():
+            st.write(f"{k}: {v} (mod {mod(v)})")
 
-        st.markdown(f"### ❤️ HP: {char['hp']}")
-        st.markdown(f"### 💰 Gold: {char['gold']}")
+        st.write(f"HP: {c['hp']} | Gold: {c['gold']}")
 
-        st.markdown("### ⚔️ Equipment")
-        for item in char["gear"]:
-            st.write(f"- {item}")
+        st.markdown("### Equipment")
+        st.write(c["gear"])
 
-        if char["spells"]:
-            st.markdown("### 🧙 Spells")
-            for s in char["spells"]:
-                st.write(f"✨ {s['name']} — {s['desc']}")
+        st.markdown("### Spells")
+        for s in c["spells"]:
+            st.write(f"{s['name']} - {s['desc']}")
 
-        st.markdown("### 📜 Backstory")
-        st.write(char["story"])
+        st.markdown("### Background")
+        st.write(c["background"])
 
-        # PDF
-        pdf = create_pdf(char)
+        st.markdown("### Roleplay")
+        st.write(c["tags"])
 
-        st.download_button(
-            "📄 Download PDF Character Sheet",
-            pdf,
-            file_name=f"{char['name']}.pdf"
-        )
+        pdf=make_pdf(c)
+        st.download_button("📄 Download PDF",pdf,file_name=f"{c['name']}.pdf")
