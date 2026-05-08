@@ -334,7 +334,6 @@ def generate_portrait(name, race, cls):
 # STAT GENERATION
 # =========================================================
 def auto_stats(cls):
-
     stats = {
         "STR": 8,
         "DEX": 8,
@@ -343,32 +342,18 @@ def auto_stats(cls):
         "WIS": 8,
         "CHA": 8
     }
-
     points = 27
 
-    order = CLASS_DATA.get(
-        cls.lower(),
-        {}
-    ).get(
-        "primary",
-        ["STR", "DEX", "CON"]
-    )
+    order = CLASS_DATA.get(cls.lower(), {}).get("primary", ["STR", "DEX", "CON"])
 
     changed = True
-
     while points > 0 and changed:
-
         changed = False
-
         for stat in order:
-
             if stats[stat] < 15:
-
                 next_score = stats[stat] + 1
-                cost = POINT_COST[next_score]
-
+                cost = POINT_COST[next_score] - POINT_COST[stats[stat]]  # ✅ Incremental cost
                 if points >= cost:
-
                     stats[stat] = next_score
                     points -= cost
                     changed = True
