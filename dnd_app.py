@@ -358,7 +358,7 @@ def apply_asi(stats, asi_choices):
 # =========================================================
 def claude(prompt, system="You are a creative D&D assistant. Be vivid and concise."):
     res = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1000,
         system=system,
         messages=[{"role":"user","content":prompt}]
