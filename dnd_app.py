@@ -1,888 +1,581 @@
 import streamlit as st
-from anthropic import Anthropic
-import random
+import anthropic
 import base64
+import random
 from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import letter
-import json
 
-# =========================================================
-# CONFIG
-# =========================================================
-st.set_page_config(
-    page_title="AI D&D Character Creator",
-    page_icon="🧙",
-    layout="wide"
-)
+st.set_page_config(page_title="AI D&D Character Creator", page_icon="🧙", layout="wide")
 
-client = Anthropic(api_key=st.secrets.get("ANTHROPIC_API_KEY"))
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-for key, default in {
-    "page": "builder",
-    "name": "",
-    "character": None,
-    "portrait_error": None,
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-# =========================================================
-# STYLE
-# =========================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
-
 .stApp {
-    background: linear-gradient(135deg, #0a0a0f 0%, #12101a 50%, #0d0a12 100%);
-    color: #e8dcc8;
-    font-family: 'Crimson Text', serif;
+    background: linear-gradient(rgba(0,0,0,.80), rgba(0,0,0,.88)),
+        url("https://images.unsplash.com/photo-1511512578047-dfb367046420");
+    background-size: cover;
+    background-attachment: fixed;
+    color: white;
 }
-
-h1, h2, h3 { font-family: 'Cinzel', serif !important; }
-
-.main-title {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 2.8rem;
-    background: linear-gradient(135deg, #d4a843, #f5d67b, #c9883a);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-align: center;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.2em;
-}
-
 .card {
-    background: linear-gradient(145deg, rgba(20,15,30,0.95), rgba(15,10,22,0.98));
-    border: 1px solid rgba(201,164,76,0.4);
-    border-radius: 12px;
-    padding: 22px 26px;
+    background: rgba(10,10,10,.82);
+    border: 2px solid #c9a44c;
+    border-radius: 18px;
+    padding: 20px;
     margin-bottom: 18px;
-    box-shadow: 0 4px 30px rgba(0,0,0,0.6), inset 0 1px 0 rgba(201,164,76,0.15);
-    position: relative;
-    overflow: hidden;
+    box-shadow: 0 0 15px rgba(0,0,0,.5);
 }
-
-.card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(201,164,76,0.6), transparent);
-}
-
-.char-title {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 2.2rem;
-    background: linear-gradient(135deg, #f5d67b, #d4a843);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.section-title {
-    font-family: 'Cinzel', serif;
-    color: #c9a44c;
-    font-size: 1.1rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-bottom: 14px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(201,164,76,0.25);
-}
-
+.char-title { color: #f5d67b; font-size: 36px; font-weight: bold; }
+.section-title { color: #f5d67b; font-size: 22px; font-weight: bold; margin-bottom: 10px; }
 .stat-box {
-    background: linear-gradient(145deg, rgba(201,164,76,0.08), rgba(201,164,76,0.03));
-    border: 1px solid rgba(201,164,76,0.35);
-    border-radius: 10px;
-    padding: 14px 8px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid #c9a44c;
+    border-radius: 12px;
+    padding: 14px;
     text-align: center;
-    transition: all 0.2s ease;
 }
-
-.stat-box:hover {
-    border-color: rgba(201,164,76,0.7);
-    background: rgba(201,164,76,0.12);
-}
-
-.stat-name {
-    font-family: 'Cinzel', serif;
-    font-size: 0.65rem;
-    letter-spacing: 0.15em;
-    color: #c9a44c;
-    text-transform: uppercase;
-}
-
-.stat-score {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 2rem;
-    color: #f5d67b;
-    line-height: 1.1;
-}
-
-.stat-mod {
-    font-size: 0.85rem;
-    color: #a89070;
-}
-
-.combat-stat {
-    background: rgba(201,164,76,0.06);
-    border: 1px solid rgba(201,164,76,0.2);
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.tag {
+.gold { color: gold; font-weight: bold; }
+.class-pill {
     display: inline-block;
-    background: rgba(201,164,76,0.15);
-    border: 1px solid rgba(201,164,76,0.3);
-    border-radius: 20px;
+    background: rgba(201,164,76,.25);
+    border: 1px solid #c9a44c;
+    border-radius: 999px;
     padding: 3px 12px;
-    font-size: 0.8rem;
-    color: #d4a843;
-    font-family: 'Cinzel', serif;
-    letter-spacing: 0.05em;
-    margin: 3px;
-}
-
-.gold { color: #d4a843; font-weight: 600; }
-.subtitle { color: #a89070; font-style: italic; font-size: 1.05rem; }
-.spell-card {
-    background: rgba(100,60,180,0.08);
-    border-left: 2px solid rgba(140,80,220,0.5);
-    padding: 8px 14px;
-    margin-bottom: 8px;
-    border-radius: 0 8px 8px 0;
-}
-
-.nav-btn {
-    background: linear-gradient(135deg, rgba(201,164,76,0.15), rgba(201,164,76,0.05));
-    border: 1px solid rgba(201,164,76,0.4);
-    color: #d4a843;
-    border-radius: 8px;
-    font-family: 'Cinzel', serif;
-    letter-spacing: 0.08em;
-}
-
-.npc-card {
-    background: rgba(60,40,100,0.15);
-    border: 1px solid rgba(140,100,200,0.3);
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
-}
-
-.error-box {
-    background: rgba(180,40,40,0.15);
-    border: 1px solid rgba(200,60,60,0.4);
-    border-radius: 8px;
-    padding: 10px 16px;
-    color: #e88;
-    margin-bottom: 10px;
+    font-size: 13px;
+    margin: 2px 4px;
+    color: #f5d67b;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# GAME DATA
-# =========================================================
+# ── Constants ──────────────────────────────────────────────────────────────────
+
 POINT_COST = {8:0, 9:1, 10:2, 11:3, 12:4, 13:5, 14:7, 15:9}
-STANDARD_ARRAY = [15, 14, 13, 12, 10, 8]
 
-CLASS_DATA = {
-    "Barbarian": {"hit_die":12,"primary":["STR","CON","DEX"],"armor":"Medium Armor","weapon":"Greataxe","ac_base":14,"spellcaster":False,
-        "subclasses":["Path of the Berserker","Path of the Totem Warrior","Path of the Storm Herald","Path of the Ancestral Guardian"],
-        "saves":["STR","CON"],"skill_options":["Athletics","Intimidation","Nature","Perception","Survival","Animal Handling"]},
-    "Fighter":  {"hit_die":10,"primary":["STR","CON","DEX"],"armor":"Heavy Armor","weapon":"Longsword & Shield","ac_base":16,"spellcaster":False,
-        "subclasses":["Battle Master","Champion","Eldritch Knight","Psi Warrior"],
-        "saves":["STR","CON"],"skill_options":["Acrobatics","Athletics","History","Insight","Intimidation","Perception","Survival"]},
-    "Rogue":    {"hit_die":8,"primary":["DEX","INT","CHA"],"armor":"Light Armor","weapon":"Rapier & Hand Crossbow","ac_base":14,"spellcaster":False,
-        "subclasses":["Thief","Assassin","Arcane Trickster","Phantom"],
-        "saves":["DEX","INT"],"skill_options":["Acrobatics","Athletics","Deception","Insight","Intimidation","Investigation","Perception","Performance","Persuasion","Sleight of Hand","Stealth"]},
-    "Wizard":   {"hit_die":6,"primary":["INT","DEX","CON"],"armor":"Robes","weapon":"Quarterstaff","ac_base":12,"spellcaster":True,
-        "subclasses":["School of Evocation","School of Illusion","School of Necromancy","Bladesinging"],
-        "saves":["INT","WIS"],"skill_options":["Arcana","History","Insight","Investigation","Medicine","Religion"]},
-    "Cleric":   {"hit_die":8,"primary":["WIS","CON","STR"],"armor":"Medium Armor","weapon":"Mace & Holy Symbol","ac_base":15,"spellcaster":True,
-        "subclasses":["Life Domain","Light Domain","War Domain","Trickery Domain"],
-        "saves":["WIS","CHA"],"skill_options":["History","Insight","Medicine","Persuasion","Religion"]},
-    "Sorcerer": {"hit_die":6,"primary":["CHA","CON","DEX"],"armor":"Mystic Cloth","weapon":"Arcane Focus","ac_base":12,"spellcaster":True,
-        "subclasses":["Wild Magic Surge","Draconic Bloodline","Storm Sorcery","Divine Soul"],
-        "saves":["CON","CHA"],"skill_options":["Arcana","Deception","Insight","Intimidation","Persuasion","Religion"]},
-    "Paladin":  {"hit_die":10,"primary":["STR","CHA","CON"],"armor":"Heavy Armor","weapon":"Longsword & Shield","ac_base":17,"spellcaster":True,
-        "subclasses":["Oath of Devotion","Oath of Vengeance","Oath of the Ancients","Oathbreaker"],
-        "saves":["WIS","CHA"],"skill_options":["Athletics","Insight","Intimidation","Medicine","Persuasion","Religion"]},
-    "Ranger":   {"hit_die":10,"primary":["DEX","WIS","CON"],"armor":"Medium Armor","weapon":"Longbow & Shortsword","ac_base":15,"spellcaster":True,
-        "subclasses":["Hunter","Beast Master","Gloom Stalker","Swarmkeeper"],
-        "saves":["STR","DEX"],"skill_options":["Animal Handling","Athletics","Insight","Investigation","Nature","Perception","Stealth","Survival"]},
-    "Druid":    {"hit_die":8,"primary":["WIS","CON","DEX"],"armor":"Hide Armor","weapon":"Quarterstaff","ac_base":13,"spellcaster":True,
-        "subclasses":["Circle of the Moon","Circle of the Land","Circle of Stars","Circle of Spores"],
-        "saves":["INT","WIS"],"skill_options":["Arcana","Animal Handling","Insight","Medicine","Nature","Perception","Religion","Survival"]},
-    "Bard":     {"hit_die":8,"primary":["CHA","DEX","CON"],"armor":"Light Armor","weapon":"Rapier","ac_base":13,"spellcaster":True,
-        "subclasses":["College of Lore","College of Valor","College of Glamour","College of Swords"],
-        "saves":["DEX","CHA"],"skill_options":["Athletics","Acrobatics","Arcana","Deception","History","Insight","Intimidation","Investigation","Medicine","Nature","Perception","Performance","Persuasion","Religion","Sleight of Hand","Stealth","Survival"]},
-    "Warlock":  {"hit_die":8,"primary":["CHA","CON","DEX"],"armor":"Light Armor","weapon":"Eldritch Blast","ac_base":13,"spellcaster":True,
-        "subclasses":["The Fiend","The Great Old One","The Archfey","The Hexblade"],
-        "saves":["WIS","CHA"],"skill_options":["Arcana","Deception","History","Intimidation","Investigation","Nature","Religion"]},
-    "Monk":     {"hit_die":8,"primary":["DEX","WIS","CON"],"armor":"No Armor (Unarmored)","weapon":"Unarmed Strike","ac_base":14,"spellcaster":False,
-        "subclasses":["Way of the Open Hand","Way of Shadow","Way of the Four Elements","Way of the Astral Self"],
-        "saves":["STR","DEX"],"skill_options":["Acrobatics","Athletics","History","Insight","Religion","Stealth"]},
-}
-
-RACE_BONUSES = {
-    "Human":        {"STR":1,"DEX":1,"CON":1,"INT":1,"WIS":1,"CHA":1},
-    "Elf":          {"DEX":2,"INT":1},
-    "Half-Elf":     {"CHA":2,"DEX":1,"WIS":1},
-    "Dwarf":        {"CON":2,"WIS":1},
-    "Halfling":     {"DEX":2,"CHA":1},
-    "Gnome":        {"INT":2,"DEX":1},
-    "Half-Orc":     {"STR":2,"CON":1},
-    "Tiefling":     {"INT":1,"CHA":2},
-    "Dragonborn":   {"STR":2,"CHA":1},
-    "Aasimar":      {"WIS":1,"CHA":2},
-    "Tabaxi":       {"DEX":2,"CHA":1},
-    "Kenku":        {"DEX":2,"WIS":1},
-    "Firbolg":      {"WIS":2,"STR":1},
-    "Goliath":      {"STR":2,"CON":1},
-    "Genasi (Fire)":{"CON":2,"INT":1},
-    "Lizardfolk":   {"CON":2,"WIS":1},
-    "Custom/Other": {},
-}
-
-FEATS = [
-    "Alert","Lucky","Observant","Resilient","Tough","War Caster",
-    "Magic Initiate","Sharpshooter","Great Weapon Master","Polearm Master",
-    "Sentinel","Mobile","Crossbow Expert","Dual Wielder","Shield Master",
+ALL_CLASSES = [
+    "Barbarian","Bard","Cleric","Druid","Fighter",
+    "Monk","Paladin","Ranger","Rogue","Sorcerer","Warlock","Wizard"
 ]
 
-ASI_LEVELS = {4, 8, 12, 16, 19}
+CLASS_DATA = {
+    "barbarian": {"hd":12, "pri":["STR","CON","DEX"], "armor":"Medium Armor", "weapon":"Greataxe",       "ac":14, "cast":False},
+    "bard":      {"hd":8,  "pri":["CHA","DEX","CON"], "armor":"Light Armor",  "weapon":"Rapier",         "ac":13, "cast":True},
+    "cleric":    {"hd":8,  "pri":["WIS","CON","STR"], "armor":"Medium Armor + Shield","weapon":"Mace",   "ac":15, "cast":True},
+    "druid":     {"hd":8,  "pri":["WIS","CON","DEX"], "armor":"Medium Armor", "weapon":"Quarterstaff",   "ac":14, "cast":True},
+    "fighter":   {"hd":10, "pri":["STR","CON","DEX"], "armor":"Heavy Armor",  "weapon":"Longsword + Shield","ac":16,"cast":False},
+    "monk":      {"hd":8,  "pri":["DEX","WIS","CON"], "armor":"Unarmored",    "weapon":"Shortsword",     "ac":14, "cast":False},
+    "paladin":   {"hd":10, "pri":["STR","CHA","CON"], "armor":"Heavy Armor",  "weapon":"Longsword + Shield","ac":17,"cast":True},
+    "ranger":    {"hd":10, "pri":["DEX","WIS","CON"], "armor":"Medium Armor", "weapon":"Longbow",        "ac":14, "cast":True},
+    "rogue":     {"hd":8,  "pri":["DEX","INT","CHA"], "armor":"Light Armor",  "weapon":"Daggers",        "ac":14, "cast":False},
+    "sorcerer":  {"hd":6,  "pri":["CHA","CON","DEX"], "armor":"Robes",        "weapon":"Arcane Focus",   "ac":12, "cast":True},
+    "warlock":   {"hd":8,  "pri":["CHA","CON","DEX"], "armor":"Light Armor",  "weapon":"Pact Weapon",    "ac":13, "cast":True},
+    "wizard":    {"hd":6,  "pri":["INT","DEX","CON"], "armor":"Robes",        "weapon":"Quarterstaff",   "ac":12, "cast":True},
+}
 
-# =========================================================
-# HELPERS
-# =========================================================
-def mod(score): return (score - 10) // 2
-def mod_str(score): m = mod(score); return f"+{m}" if m >= 0 else str(m)
-def proficiency_bonus(level): return 2 + ((level - 1) // 4)
+STATS = ["STR","DEX","CON","INT","WIS","CHA"]
 
-def apply_racial_bonuses(base_stats, race):
-    bonuses = RACE_BONUSES.get(race, {})
-    return {k: v + bonuses.get(k, 0) for k, v in base_stats.items()}
+ALIGNMENTS = [
+    "Lawful Good","Neutral Good","Chaotic Good",
+    "Lawful Neutral","True Neutral","Chaotic Neutral",
+    "Lawful Evil","Neutral Evil","Chaotic Evil"
+]
 
-def get_asi_count(level):
-    return sum(1 for l in ASI_LEVELS if l <= level)
+# ── Session state ──────────────────────────────────────────────────────────────
 
-def hp_calc(cls, level, con_mod):
-    hit_die = CLASS_DATA[cls]["hit_die"]
-    return hit_die + (hit_die // 2 + 1) * (level - 1) + con_mod * level
+for k,v in {
+    "page":"builder",
+    "name":"",
+    "character":None,
+    "classes":[{"cls":"Fighter","level":1}],
+    "portrait_bytes":None,
+}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-def armor_class(cls, dex_mod):
-    base = CLASS_DATA[cls]["ac_base"]
-    if cls in ["Wizard","Sorcerer","Bard","Warlock"]:
-        return base + dex_mod
-    return base
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-def initiative(dex_mod): return dex_mod
+def get_client():
+    key = st.secrets.get("ANTHROPIC_API_KEY","")
+    if not key:
+        st.error("Add ANTHROPIC_API_KEY to your Streamlit secrets.")
+        st.stop()
+    return anthropic.Anthropic(api_key=key)
 
-def skill_modifier(stats, skill, prof_bonus, proficient_skills):
-    skill_stat = {
-        "Acrobatics":"DEX","Animal Handling":"WIS","Arcana":"INT","Athletics":"STR",
-        "Deception":"CHA","History":"INT","Insight":"WIS","Intimidation":"CHA",
-        "Investigation":"INT","Medicine":"WIS","Nature":"INT","Perception":"WIS",
-        "Performance":"CHA","Persuasion":"CHA","Religion":"INT","Sleight of Hand":"DEX",
-        "Stealth":"DEX","Survival":"WIS",
-    }
-    stat = skill_stat.get(skill, "STR")
-    base = mod(stats[stat])
-    return base + (prof_bonus if skill in proficient_skills else 0)
+def stat_mod(score):
+    return (score - 10) // 2
 
-def equipment(cls):
-    data = CLASS_DATA[cls]
-    gear = [data["weapon"], data["armor"], "Backpack", "Torch x5", "Rations x10", "50ft Rope", "Waterskin", "Bedroll", "Tinderbox"]
-    return gear, random.randint(50, 200)
+def prof_bonus(total_level):
+    return 2 + ((total_level - 1) // 4)
 
-# =========================================================
-# STAT GENERATION
-# =========================================================
-def auto_stats(cls):
-    stats = {s: 8 for s in ["STR","DEX","CON","INT","WIS","CHA"]}
+def total_levels():
+    return sum(c["level"] for c in st.session_state.classes)
+
+def auto_stats(class_names):
+    pri = []
+    for c in class_names:
+        for s in CLASS_DATA.get(c.lower(), {}).get("pri", []):
+            if s not in pri:
+                pri.append(s)
+    order = pri + [s for s in STATS if s not in pri]
+    stats = {s: 8 for s in STATS}
     points = 27
-    order = CLASS_DATA[cls]["primary"]
-    all_stats = order + [s for s in ["STR","DEX","CON","INT","WIS","CHA"] if s not in order]
     changed = True
     while points > 0 and changed:
         changed = False
-        for stat in all_stats:
+        for stat in order:
             if stats[stat] < 15:
-                cost = POINT_COST[stats[stat] + 1] - POINT_COST[stats[stat]]
+                nxt = stats[stat] + 1
+                cost = POINT_COST[nxt]
                 if points >= cost:
-                    stats[stat] += 1
+                    stats[stat] = nxt
                     points -= cost
                     changed = True
     return stats
 
-def standard_array_stats(cls):
-    order = CLASS_DATA[cls]["primary"]
-    all_stats = ["STR","DEX","CON","INT","WIS","CHA"]
-    remaining = [s for s in all_stats if s not in order]
-    assignment = {}
-    sorted_array = sorted(STANDARD_ARRAY, reverse=True)
-    for i, stat in enumerate(order):
-        assignment[stat] = sorted_array[i]
-    for i, stat in enumerate(remaining):
-        assignment[stat] = sorted_array[len(order) + i]
-    return assignment
+def get_equipment(class_names):
+    gear = {"Backpack","Torch","Rations","Rope","Waterskin"}
+    for c in class_names:
+        d = CLASS_DATA.get(c.lower(), {})
+        if d.get("weapon"): gear.add(d["weapon"])
+        if d.get("armor"):  gear.add(d["armor"])
+    return sorted(gear)
 
-def roll_stats():
-    stats = {}
-    for s in ["STR","DEX","CON","INT","WIS","CHA"]:
-        rolls = [random.randint(1,6) for _ in range(4)]
-        stats[s] = sum(sorted(rolls)[1:])
-    return stats
+def best_ac(class_names, dex_mod):
+    ac = 10 + dex_mod
+    for c in class_names:
+        d = CLASS_DATA.get(c.lower(), {})
+        candidate = d.get("ac", 10) + dex_mod
+        if candidate > ac:
+            ac = candidate
+    return ac
 
-def apply_asi(stats, asi_choices):
-    result = dict(stats)
-    for stat, inc in asi_choices.items():
-        result[stat] = min(20, result.get(stat, 8) + inc)
-    return result
+def calc_hp(class_names, levels, con_mod):
+    hp = 0
+    for cls, lvl in zip(class_names, levels):
+        hd = CLASS_DATA.get(cls.lower(), {}).get("hd", 8)
+        hp += hd * lvl
+    hp += con_mod * sum(levels)
+    return max(hp, 1)
 
-# =========================================================
-# AI FUNCTIONS (Claude)
-# =========================================================
-def claude(prompt, system="You are a creative D&D assistant. Be vivid and concise."):
-    res = client.messages.create(
-        model="claude-sonnet-4-6",
+# ── AI functions ───────────────────────────────────────────────────────────────
+
+def generate_name(race):
+    client = get_client()
+    msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=50,
+        messages=[{"role":"user","content":f"Create ONE fantasy D&D name for a {race}. Return only the name."}]
+    )
+    return msg.content[0].text.strip().split("\n")[0].strip()
+
+def generate_backstory(name, race, background, alignment, class_desc):
+    client = get_client()
+    bg_note = f"Background: {background}\n" if background else ""
+    prompt = (
+        f"Write an immersive D&D backstory for:\n"
+        f"Name: {name}\nRace: {race}\n{bg_note}"
+        f"Alignment: {alignment}\nClasses: {class_desc}\n\n"
+        f"Weave the multiclass combination naturally into the narrative. "
+        f"Include: origin, how they came to train in multiple disciplines, "
+        f"motivation, a flaw, a personality trait, and a plot hook. 3–4 paragraphs."
+    )
+    msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
         max_tokens=1000,
-        system=system,
+        system="You are a creative D&D storyteller. Write vivid, specific backstories.",
         messages=[{"role":"user","content":prompt}]
     )
-    return res.content[0].text.strip()
+    return msg.content[0].text
 
-@st.cache_data(show_spinner=False)
-def generate_name(race, cls):
-    return claude(f"Create ONE fantasy D&D name for a {race} {cls}. Return ONLY the name, nothing else.")
-
-@st.cache_data(show_spinner=False)
-def generate_backstory(name, race, cls, subclass):
-    return claude(
-        f"Write an immersive D&D backstory for {name}, a {race} {subclass} {cls}.\n"
-        "Include: origin, key motivation, a defining flaw, vivid personality trait, and a compelling plot hook.\n"
-        "Write 3-4 paragraphs. Be specific and evocative."
-    )
-
-@st.cache_data(show_spinner=False)
-def generate_personality(name, race, cls):
-    prompt = (
-        f"For a D&D character: {name}, {race} {cls}.\n"
-        "Return ONLY a JSON object with keys: trait, ideal, bond, flaw. Each value is one vivid sentence.\n"
-        "No markdown, no backticks, just raw JSON."
-    )
-    raw = claude(prompt)
-    try:
-        return json.loads(raw.strip().strip("```json").strip("```"))
-    except:
-        return {"trait":"Brave and reckless","ideal":"Freedom above all","bond":"A mentor long lost","flaw":"Cannot resist a challenge"}
-
-@st.cache_data(show_spinner=False)
-def generate_npcs(name, race, cls, backstory_snippet):
-    prompt = (
-        f"For D&D character {name} ({race} {cls}), create 3 named NPCs from their backstory.\n"
-        "Return ONLY a JSON array of objects with keys: name, role, relationship, secret.\n"
-        "No markdown, no backticks, just raw JSON array."
-    )
-    raw = claude(prompt)
-    try:
-        clean = raw.strip().strip("```json").strip("```").strip()
-        return json.loads(clean)
-    except:
-        return [{"name":"Unknown Ally","role":"Mentor","relationship":"Trusted friend","secret":"Harbors a dark past"}]
-
-@st.cache_data(show_spinner=False)
-def generate_quest_hook(name, race, cls, subclass):
-    return claude(
-        f"Write a single specific adventure quest hook (2-3 sentences) for {name}, a {race} {subclass} {cls}. "
-        "Make it unique, personal, and immediately actionable. Include a named location and antagonist."
-    )
-
-@st.cache_data(show_spinner=False)
-def generate_spells(cls, subclass, level):
-    if not CLASS_DATA[cls]["spellcaster"]:
+def generate_spells(caster_entries):
+    if not caster_entries:
         return []
-    n = min(3 + level // 2, 10)
+    client = get_client()
+    caster_desc = " / ".join(f"{e['cls']} (level {e['level']})" for e in caster_entries)
     prompt = (
-        f"Generate {n} D&D 5e spells for a level {level} {subclass} {cls}.\n"
-        "Include cantrips and leveled spells appropriate for their level.\n"
-        "Return ONLY a JSON array of objects with keys: name, level (0=cantrip), school, description (one sentence).\n"
-        "No markdown, no backticks, just raw JSON array."
+        f"List 5 D&D 5e spells for a {caster_desc} character. "
+        f"Pick spells appropriate to their class mix and levels. "
+        f"Format each line exactly as:\nSpell Name [ClassName] - one sentence description\n"
+        f"Return only those 5 lines, nothing else."
     )
-    raw = claude(prompt)
-    try:
-        clean = raw.strip().strip("```json").strip("```").strip()
-        return json.loads(clean)
-    except:
-        return [{"name":"Magic Missile","level":1,"school":"Evocation","description":"Darts of force that always hit."}]
+    msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=400,
+        system="You are a D&D 5e expert. Return only the list.",
+        messages=[{"role":"user","content":prompt}]
+    )
+    spells = []
+    for line in msg.content[0].text.strip().split("\n"):
+        if " - " in line:
+            import re
+            m = re.match(r"^(.+?)\s*\[(.+?)\]\s*-\s*(.+)$", line)
+            if m:
+                spells.append({"name":m.group(1).strip(),"src":m.group(2).strip(),"desc":m.group(3).strip()})
+            else:
+                parts = line.split(" - ", 1)
+                spells.append({"name":parts[0].strip(),"src":"","desc":parts[1].strip()})
+    return spells[:5]
 
-# =========================================================
-# PDF EXPORT
-# =========================================================
+def generate_portrait(name, race, class_names, alignment):
+    client = get_client()
+    # Step 1: write a portrait prompt
+    cls_str = " / ".join(class_names)
+    prompt_msg = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=120,
+        system="You write vivid, concise image prompts for fantasy character portraits. Return only the prompt, no preamble.",
+        messages=[{"role":"user","content":(
+            f"Write a concise image-generation prompt (under 70 words) for a fantasy portrait of:\n"
+            f"Name: {name}, Race: {race}, Classes: {cls_str}, Alignment: {alignment}\n"
+            f"Describe appearance, distinctive features blending class aesthetics, equipment, and mood. "
+            f"Cinematic fantasy art style. No text in image."
+        )}]
+    )
+    portrait_prompt = prompt_msg.content[0].text.strip()
+
+    # Step 2: generate image
+    img_response = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2048,
+        messages=[{"role":"user","content":[
+            {"type":"text","text":(
+                f"Generate a detailed fantasy RPG character portrait. "
+                f"{portrait_prompt} "
+                f"Square format, waist-up or bust shot, dramatic cinematic lighting, "
+                f"highly detailed fantasy concept art style."
+            )}
+        ]}]
+    )
+    for block in img_response.content:
+        if block.type == "image":
+            return base64.b64decode(block.source.data)
+    return None
+
+# ── PDF export ─────────────────────────────────────────────────────────────────
+
 def make_pdf(c):
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter)
+    doc = SimpleDocTemplate(buf)
     styles = getSampleStyleSheet()
     elems = []
 
     elems.append(Paragraph(f"<b>{c['name']}</b>", styles["Title"]))
-    elems.append(Paragraph(f"{c['race']} {c['subclass']} {c['class']} • Level {c['level']}", styles["Normal"]))
-    elems.append(Spacer(1, 12))
+    cls_line = "  |  ".join(f"{e['cls']} {e['level']}" for e in c["classes"])
+    elems.append(Paragraph(f"{c['race']} — {cls_line} — Level {c['total_level']}", styles["Normal"]))
+    elems.append(Paragraph(f"{c['alignment']}  •  {c.get('background','')}", styles["Normal"]))
+    elems.append(Spacer(1, 10))
 
-    # Stats
-    elems.append(Paragraph("Ability Scores", styles["Heading2"]))
-    data = [["Stat","Score","Modifier","Save"]]
-    saves = CLASS_DATA[c["class"]]["saves"]
-    pb = c["prof_bonus"]
-    for k, v in c["stats"].items():
-        m = mod(v)
-        save = m + (pb if k in saves else 0)
-        data.append([k, str(v), mod_str(v), mod_str(save)])
-    t = Table(data, colWidths=[80,60,80,60])
+    # Stats table
+    data = [["Stat","Score","Modifier"]]
+    for k,v in c["stats"].items():
+        m = stat_mod(v)
+        data.append([k, str(v), f"{'+' if m>=0 else ''}{m}"])
+    t = Table(data)
     t.setStyle(TableStyle([
-        ("GRID",(0,0),(-1,-1),0.5,colors.grey),
-        ("BACKGROUND",(0,0),(-1,0),colors.Color(0.15,0.1,0.25)),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("GRID",(0,0),(-1,-1),1,colors.black),
+        ("BACKGROUND",(0,0),(-1,0),colors.lightgrey),
     ]))
     elems.append(t)
     elems.append(Spacer(1,10))
 
-    # Combat
-    elems.append(Paragraph("Combat", styles["Heading2"]))
-    elems.append(Paragraph(f"HP: {c['hp']}  |  AC: {c['ac']}  |  Initiative: {mod_str(c['initiative'])}  |  Proficiency: +{c['prof_bonus']}", styles["Normal"]))
-    elems.append(Spacer(1,8))
+    elems.append(Paragraph(f"HP: {c['hp']}   |   AC: {c['ac']}   |   Initiative: {stat_mod(c['stats']['DEX']):+}   |   Proficiency: +{c['prof_bonus']}", styles["Normal"]))
+    elems.append(Spacer(1,10))
 
-    # Personality
-    if c.get("personality"):
-        elems.append(Paragraph("Personality", styles["Heading2"]))
-        p = c["personality"]
-        elems.append(Paragraph(f"<b>Trait:</b> {p.get('trait','')}", styles["Normal"]))
-        elems.append(Paragraph(f"<b>Ideal:</b> {p.get('ideal','')}", styles["Normal"]))
-        elems.append(Paragraph(f"<b>Bond:</b> {p.get('bond','')}", styles["Normal"]))
-        elems.append(Paragraph(f"<b>Flaw:</b> {p.get('flaw','')}", styles["Normal"]))
-        elems.append(Spacer(1,8))
+    if c.get("portrait_bytes"):
+        from reportlab.platypus import Image as RLImage
+        from PIL import Image as PILImage
+        img = PILImage.open(BytesIO(c["portrait_bytes"]))
+        img_buf = BytesIO()
+        img.save(img_buf, format="PNG")
+        img_buf.seek(0)
+        elems.append(RLImage(img_buf, width=200, height=200))
+        elems.append(Spacer(1,10))
 
-    # Equipment
     elems.append(Paragraph("Equipment", styles["Heading2"]))
-    for item in c["gear"]:
-        elems.append(Paragraph(f"• {item}", styles["Normal"]))
+    for g in c["gear"]:
+        elems.append(Paragraph(f"• {g}", styles["Normal"]))
     elems.append(Paragraph(f"Gold: {c['gold']} gp", styles["Normal"]))
-    elems.append(Spacer(1,8))
+    elems.append(Spacer(1,10))
 
-    # Spells
     if c.get("spells"):
         elems.append(Paragraph("Spells", styles["Heading2"]))
         for s in c["spells"]:
-            lvl = "Cantrip" if s.get("level")==0 else f"Level {s.get('level','?')}"
-            elems.append(Paragraph(f"<b>{s['name']}</b> ({lvl}, {s.get('school','')}) — {s.get('description','')}", styles["Normal"]))
-        elems.append(Spacer(1,8))
+            src = f" [{s['src']}]" if s.get("src") else ""
+            elems.append(Paragraph(f"• {s['name']}{src} — {s['desc']}", styles["Normal"]))
+        elems.append(Spacer(1,10))
 
-    # NPCs
-    if c.get("npcs"):
-        elems.append(Paragraph("Notable NPCs", styles["Heading2"]))
-        for npc in c["npcs"]:
-            elems.append(Paragraph(f"<b>{npc['name']}</b> ({npc.get('role','')}) — {npc.get('relationship','')}", styles["Normal"]))
-            elems.append(Paragraph(f"Secret: {npc.get('secret','')}", styles["Normal"]))
-        elems.append(Spacer(1,8))
-
-    # Backstory
     elems.append(Paragraph("Backstory", styles["Heading2"]))
-    elems.append(Paragraph(c["story"], styles["BodyText"]))
-
-    if c.get("quest_hook"):
-        elems.append(Spacer(1,8))
-        elems.append(Paragraph("Quest Hook", styles["Heading2"]))
-        elems.append(Paragraph(c["quest_hook"], styles["BodyText"]))
+    for para in c["story"].split("\n\n"):
+        if para.strip():
+            elems.append(Paragraph(para.strip(), styles["BodyText"]))
+            elems.append(Spacer(1,6))
 
     doc.build(elems)
     buf.seek(0)
     return buf
 
-# =========================================================
-# JSON EXPORT / IMPORT
-# =========================================================
-def export_character(c):
-    exportable = {k: v for k, v in c.items() if k != "image"}
-    return json.dumps(exportable, indent=2)
+# ── Nav ────────────────────────────────────────────────────────────────────────
 
-# =========================================================
-# NAV
-# =========================================================
-st.markdown('<div class="main-title">⚔️ AI D&D Character Creator</div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([1,1,1])
+col1, col2 = st.columns(2)
 with col1:
     if st.button("🛠️ Builder", use_container_width=True):
         st.session_state.page = "builder"
 with col2:
     if st.button("🎴 Character Sheet", use_container_width=True):
         st.session_state.page = "sheet"
-with col3:
-    if st.button("📖 Import Character", use_container_width=True):
-        st.session_state.page = "import"
 
-st.markdown("---")
+st.divider()
 
-# =========================================================
-# IMPORT PAGE
-# =========================================================
-if st.session_state.page == "import":
-    st.markdown("### Import Character (JSON)")
-    uploaded = st.file_uploader("Upload character JSON", type=["json"])
-    raw_json = st.text_area("Or paste JSON here")
-    if st.button("Load Character"):
-        try:
-            data = json.loads(uploaded.read() if uploaded else raw_json)
-            st.session_state.character = data
-            st.session_state.page = "sheet"
-            st.success("Character loaded!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Failed to parse JSON: {e}")
-
-# =========================================================
+# ═══════════════════════════════════════════════════════════════════════════════
 # BUILDER PAGE
-# =========================================================
-elif st.session_state.page == "builder":
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    with st.container():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">⚔️ Character Basics</div>', unsafe_allow_html=True)
+if st.session_state.page == "builder":
+    st.title("🧙 AI D&D Character Creator")
+    st.caption("Multiclass support · AI backstory · AI portrait · PDF export")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            race = st.selectbox("Race", list(RACE_BONUSES.keys()))
-            cls  = st.selectbox("Class", list(CLASS_DATA.keys()))
-        with col2:
-            subclass = st.selectbox("Subclass", CLASS_DATA[cls]["subclasses"])
-            level    = st.slider("Level", 1, 20, 1)
+    # ── Identity ──
+    st.markdown('<div class="card"><div class="section-title">Identity</div>', unsafe_allow_html=True)
+    col_r, col_b = st.columns(2)
+    with col_r:
+        race = st.text_input("Race", placeholder="e.g. Half-Elf, Tiefling, Dwarf…")
+    with col_b:
+        background = st.text_input("Background", placeholder="e.g. Soldier, Sage, Criminal…")
 
-        # Name
-        name_col, btn_col = st.columns([3,1])
-        with btn_col:
-            if st.button("🎲 Generate Name"):
-                with st.spinner("Conjuring name..."):
-                    st.session_state.name = generate_name(race, cls)
-        with name_col:
-            name = st.text_input("Character Name", key="name")
+    alignment = st.selectbox("Alignment", ALIGNMENTS, index=4)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    col_name, col_btn = st.columns([3,1])
+    with col_name:
+        name = st.text_input("Character Name", value=st.session_state.name, placeholder="Enter or generate a name…")
+        st.session_state.name = name
+    with col_btn:
+        st.write("")
+        st.write("")
+        if st.button("🎲 Generate Name"):
+            if race:
+                with st.spinner("Generating name…"):
+                    st.session_state.name = generate_name(race)
+                st.rerun()
+            else:
+                st.warning("Enter a race first.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # ---- STATS ----
-    with st.container():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">🎲 Ability Scores</div>', unsafe_allow_html=True)
+    # ── Classes ──
+    st.markdown('<div class="card"><div class="section-title">Classes</div>', unsafe_allow_html=True)
 
-        mode = st.radio("Stat Generation Method", ["Auto Optimized","Standard Array","Manual Point Buy","Dice Roll (4d6 drop lowest)"], horizontal=True)
+    tot = total_levels()
+    st.caption(f"Total levels: **{tot} / 20**" + (" ⚠️ Over limit!" if tot > 20 else ""))
 
-        manual_stats = {}
-        total_cost   = 0
-        rolled_stats = {}
+    for i, entry in enumerate(st.session_state.classes):
+        used = [e["cls"] for j,e in enumerate(st.session_state.classes) if j != i]
+        available = [c for c in ALL_CLASSES if c not in used]
+        c1, c2, c3 = st.columns([3, 1, 0.4])
+        with c1:
+            idx = available.index(entry["cls"]) if entry["cls"] in available else 0
+            new_cls = st.selectbox(f"Class {i+1}", available, index=idx, key=f"cls_{i}", label_visibility="collapsed")
+            st.session_state.classes[i]["cls"] = new_cls
+        with c2:
+            others = sum(e["level"] for j,e in enumerate(st.session_state.classes) if j != i)
+            max_lvl = max(1, 20 - others)
+            new_lvl = st.number_input("Level", min_value=1, max_value=max_lvl,
+                                       value=min(entry["level"], max_lvl),
+                                       key=f"lvl_{i}", label_visibility="collapsed")
+            st.session_state.classes[i]["level"] = int(new_lvl)
+        with c3:
+            st.write("")
+            if len(st.session_state.classes) > 1:
+                if st.button("✕", key=f"rem_{i}"):
+                    st.session_state.classes.pop(i)
+                    st.rerun()
 
-        if mode == "Manual Point Buy":
-            st.caption("Budget: 27 points")
-            cols = st.columns(6)
-            for i, stat in enumerate(["STR","DEX","CON","INT","WIS","CHA"]):
-                with cols[i]:
-                    val = st.slider(stat, 8, 15, 8, key=f"pb_{stat}")
-                    manual_stats[stat] = val
-                    total_cost += POINT_COST[val]
-            color = "🔴" if total_cost > 27 else "🟢"
-            st.write(f"{color} Points Used: **{total_cost}/27**")
+    col_add, col_info = st.columns([1,3])
+    with col_add:
+        can_add = total_levels() < 20 and len(st.session_state.classes) < 12
+        if st.button("➕ Add Class", disabled=not can_add):
+            used = [e["cls"] for e in st.session_state.classes]
+            new = next((c for c in ALL_CLASSES if c not in used), None)
+            if new:
+                st.session_state.classes.append({"cls": new, "level": 1})
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        elif mode == "Dice Roll (4d6 drop lowest)":
-            if st.button("🎲 Roll Stats"):
-                st.session_state["rolled"] = roll_stats()
-            if "rolled" in st.session_state:
-                rolled_stats = st.session_state["rolled"]
-                cols = st.columns(6)
-                for i, (stat, val) in enumerate(rolled_stats.items()):
-                    with cols[i]:
-                        st.metric(stat, val, mod_str(val))
+    # ── Stats ──
+    st.markdown('<div class="card"><div class="section-title">Ability Scores</div>', unsafe_allow_html=True)
+    stat_mode = st.radio("Generation method", ["Auto Optimized (27-point buy)", "Manual Point Buy"], horizontal=True)
 
-        elif mode == "Standard Array":
-            preview = standard_array_stats(cls)
-            cols = st.columns(6)
-            for i, (stat, val) in enumerate(preview.items()):
-                with cols[i]:
-                    st.metric(stat, val, f"→ {val + RACE_BONUSES.get(race,{}).get(stat,0)} w/ race")
+    manual_stats = {}
+    if "Manual" in stat_mode:
+        total_cost = 0
+        cols = st.columns(6)
+        for i, stat in enumerate(STATS):
+            with cols[i]:
+                val = st.slider(stat, 8, 15, 8, key=f"pb_{stat}")
+                manual_stats[stat] = val
+                total_cost += POINT_COST[val]
+        color = "red" if total_cost > 27 else "green"
+        st.markdown(f"Points used: <span style='color:{color};font-weight:bold'>{total_cost}/27</span>", unsafe_allow_html=True)
+        if total_cost > 27:
+            st.error("Point buy exceeds 27 — reduce some stats.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        # ---- ASI ----
-        asi_count = get_asi_count(level)
-        asi_choices = {}
-        if asi_count > 0:
-            st.markdown("---")
-            st.markdown(f'<div class="section-title">📈 Ability Score Improvements ({asi_count} available)</div>', unsafe_allow_html=True)
-            st.caption("Each ASI gives +2 to one stat or +1 to two stats. Or choose a feat.")
-
-            for i in range(asi_count):
-                with st.expander(f"ASI #{i+1}"):
-                    choice = st.radio(f"ASI {i+1} type", ["+2 to one stat","+1 to two stats","Take a Feat"], key=f"asi_type_{i}", horizontal=True)
-                    if choice == "+2 to one stat":
-                        s = st.selectbox("Stat", ["STR","DEX","CON","INT","WIS","CHA"], key=f"asi_s1_{i}")
-                        asi_choices[s] = asi_choices.get(s, 0) + 2
-                    elif choice == "+1 to two stats":
-                        s1 = st.selectbox("First stat", ["STR","DEX","CON","INT","WIS","CHA"], key=f"asi_s2a_{i}")
-                        s2 = st.selectbox("Second stat", ["STR","DEX","CON","INT","WIS","CHA"], key=f"asi_s2b_{i}", index=1)
-                        asi_choices[s1] = asi_choices.get(s1, 0) + 1
-                        asi_choices[s2] = asi_choices.get(s2, 0) + 1
-                    else:
-                        feat = st.selectbox("Feat", FEATS, key=f"feat_{i}")
-                        if "feats" not in asi_choices:
-                            asi_choices["feats"] = []
-                        if isinstance(asi_choices.get("feats"), list):
-                            asi_choices["feats"].append(feat)
-
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- SKILLS ----
-    with st.container():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">🎓 Proficient Skills</div>', unsafe_allow_html=True)
-        skill_pool = CLASS_DATA[cls]["skill_options"]
-        max_skills = 4 if cls in ["Rogue","Bard"] else 2
-        chosen_skills = st.multiselect(f"Choose up to {max_skills} skills", skill_pool, max_selections=max_skills)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- GENERATE ----
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("📜 Generate Character", use_container_width=True, type="primary"):
-        if not (name and race and cls):
-            st.warning("Fill in all fields.")
+    # ── Generate ──
+    if st.button("📜 Generate Character", type="primary", use_container_width=True):
+        name = st.session_state.name.strip()
+        if not name or not race:
+            st.error("Please fill in race and name.")
             st.stop()
-        if mode == "Manual Point Buy" and total_cost > 27:
-            st.warning("Point buy exceeds 27 points.")
+        if total_levels() < 1 or total_levels() > 20:
+            st.error("Total class levels must be between 1 and 20.")
             st.stop()
-
-        # Resolve base stats
-        if mode == "Auto Optimized":
-            base = auto_stats(cls)
-        elif mode == "Standard Array":
-            base = standard_array_stats(cls)
-        elif mode == "Manual Point Buy":
-            base = manual_stats
+        if "Manual" in stat_mode:
+            if total_cost > 27:
+                st.error("Fix point buy before generating.")
+                st.stop()
+            stats = manual_stats
         else:
-            base = rolled_stats if rolled_stats else auto_stats(cls)
+            stats = auto_stats([e["cls"] for e in st.session_state.classes])
 
-        # Apply ASIs then racial bonuses
-        feats_chosen = asi_choices.pop("feats", [])
-        base = apply_asi(base, asi_choices)
-        stats = apply_racial_bonuses(base, race)
+        class_names  = [e["cls"] for e in st.session_state.classes]
+        class_levels = [e["level"] for e in st.session_state.classes]
+        total_lvl    = sum(class_levels)
+        class_desc   = " / ".join(f"{c} {l}" for c,l in zip(class_names, class_levels))
+        casters      = [e for e in st.session_state.classes if CLASS_DATA.get(e["cls"].lower(),{}).get("cast")]
 
-        dex_mod = mod(stats["DEX"])
-        con_mod = mod(stats["CON"])
-        hp      = hp_calc(cls, level, con_mod)
-        ac      = armor_class(cls, dex_mod)
-        init    = initiative(dex_mod)
-        gear, gold = equipment(cls)
-        pb      = proficiency_bonus(level)
+        dm = stat_mod(stats["DEX"])
+        cm = stat_mod(stats["CON"])
 
-        with st.spinner("✨ Generating your character..."):
-            story       = generate_backstory(name, race, cls, subclass)
-            personality = generate_personality(name, race, cls)
-            npcs        = generate_npcs(name, race, cls, story[:200])
-            quest_hook  = generate_quest_hook(name, race, cls, subclass)
-            spells      = generate_spells(cls, subclass, level)
+        with st.status("Generating your character…", expanded=True) as status:
+            st.write("✍️ Writing backstory…")
+            story = generate_backstory(name, race, background, alignment, class_desc)
+
+            st.write("✨ Selecting spells…")
+            spells = generate_spells(casters)
+
+            st.write("🎨 Painting your portrait…")
+            portrait_bytes = None
+            try:
+                portrait_bytes = generate_portrait(name, race, class_names, alignment)
+            except Exception as e:
+                st.warning(f"Portrait generation failed: {e}")
+
+            status.update(label="Character ready!", state="complete")
 
         st.session_state.character = {
-            "name": name, "race": race, "class": cls,
-            "subclass": subclass, "level": level,
-            "stats": stats, "hp": hp, "ac": ac,
-            "initiative": init, "gear": gear, "gold": gold,
-            "spells": spells, "story": story,
-            "personality": personality, "npcs": npcs,
-            "quest_hook": quest_hook, "image": None,
-            "prof_bonus": pb, "chosen_skills": chosen_skills,
-            "feats": feats_chosen,
+            "name":         name,
+            "race":         race,
+            "background":   background,
+            "alignment":    alignment,
+            "classes":      [dict(e) for e in st.session_state.classes],
+            "total_level":  total_lvl,
+            "stats":        stats,
+            "hp":           calc_hp(class_names, class_levels, cm),
+            "ac":           best_ac(class_names, dm),
+            "gear":         get_equipment(class_names),
+            "gold":         random.randint(20, 150),
+            "spells":       spells,
+            "story":        story,
+            "prof_bonus":   prof_bonus(total_lvl),
+            "portrait_bytes": portrait_bytes,
         }
+        st.session_state.portrait_bytes = portrait_bytes
+        st.session_state.page = "sheet"
+        st.rerun()
 
-        st.success("✅ Character generated! Switch to the Character Sheet tab.")
-
-# =========================================================
+# ═══════════════════════════════════════════════════════════════════════════════
 # SHEET PAGE
-# =========================================================
-elif st.session_state.page == "sheet":
+# ═══════════════════════════════════════════════════════════════════════════════
+
+else:
     c = st.session_state.character
     if not c:
-        st.warning("Generate a character first.")
+        st.warning("Generate a character first using the Builder.")
         st.stop()
 
     # Header
+    cls_pills = "  ".join(
+        f'<span class="class-pill">{e["cls"]} {e["level"]}</span>'
+        for e in c["classes"]
+    )
+    bg_line = f" · {c['background']}" if c.get("background") else ""
     st.markdown(f"""
     <div class="card">
         <div class="char-title">{c['name']}</div>
-        <div class="subtitle">{c['race']} • {c['subclass']} {c['class']} • Level {c['level']}</div>
+        <div style="color:#bbb;font-size:15px;margin:4px 0 10px">
+            {c['race']}{bg_line} · Level {c['total_level']} · {c['alignment']}
+        </div>
+        <div>{cls_pills}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Tabs
-    tabs = st.tabs(["📊 Stats & Combat","🎒 Equipment","✨ Spells","🧠 Personality","📜 Backstory","👥 NPCs","⚔️ Quest Hook","📤 Export"])
+    left_col, right_col = st.columns([1, 2])
 
-    # ---- TAB 1: Stats & Combat ----
-    with tabs[0]:
-        pb = c["prof_bonus"]
-        saves = CLASS_DATA[c["class"]]["saves"]
+    # Portrait
+    with left_col:
+        if c.get("portrait_bytes"):
+            st.image(c["portrait_bytes"], use_container_width=True)
+        else:
+            st.markdown("""
+            <div style="aspect-ratio:1;background:rgba(255,255,255,.05);border:1px solid #c9a44c;
+                        border-radius:12px;display:flex;align-items:center;justify-content:center;
+                        color:#888;font-size:14px">No portrait</div>
+            """, unsafe_allow_html=True)
 
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Ability Scores</div>', unsafe_allow_html=True)
-        cols = st.columns(6)
+        # PDF download
+        pdf_buf = make_pdf(c)
+        st.download_button(
+            "📄 Download PDF",
+            pdf_buf,
+            file_name=f"{c['name'].replace(' ','_')}_character_sheet.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+    # Stats
+    with right_col:
+        st.markdown('<div class="card"><div class="section-title">Ability Scores</div>', unsafe_allow_html=True)
+        scols = st.columns(6)
         for i, (stat, val) in enumerate(c["stats"].items()):
-            with cols[i]:
+            m = stat_mod(val)
+            with scols[i]:
                 st.markdown(f"""
                 <div class="stat-box">
-                    <div class="stat-name">{stat}</div>
-                    <div class="stat-score">{val}</div>
-                    <div class="stat-mod">{mod_str(val)}</div>
-                    {'<div class="gold">✦ Save</div>' if stat in saves else ''}
+                    <b>{stat}</b><br>
+                    <span style="font-size:28px;font-weight:bold">{val}</span><br>
+                    <span style="color:#aaa">{m:+}</span>
                 </div>
                 """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Combat Stats</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("❤️ Hit Points", c["hp"]),
-                ("🛡️ Armor Class", c["ac"]),
-                (f"⚡ Initiative", mod_str(c["initiative"])),
-                (f"🎯 Proficiency Bonus", f"+{pb}"),
-                ("🎲 Hit Die", f"d{CLASS_DATA[c['class']]['hit_die']}"),
-            ]:
-                st.markdown(f"""
-                <div class="combat-stat">
-                    <span>{label}</span>
-                    <span class="gold"><b>{val}</b></span>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        with col2:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Skills</div>', unsafe_allow_html=True)
-            all_skills = ["Acrobatics","Animal Handling","Arcana","Athletics","Deception",
-                          "History","Insight","Intimidation","Investigation","Medicine",
-                          "Nature","Perception","Performance","Persuasion","Religion",
-                          "Sleight of Hand","Stealth","Survival"]
-            proficient = c.get("chosen_skills", [])
-            for skill in all_skills:
-                m = skill_modifier(c["stats"], skill, pb, proficient)
-                star = "⭐" if skill in proficient else "  "
-                st.markdown(f"<div style='display:flex;justify-content:space-between;padding:2px 0;'><span>{star} {skill}</span><span class='gold'>{mod_str(m)}</span></div>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        if c.get("feats"):
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Feats</div>', unsafe_allow_html=True)
-            for feat in c["feats"]:
-                st.markdown(f'<span class="tag">⭐ {feat}</span>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- TAB 2: Equipment ----
-    with tabs[1]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Gear & Equipment</div>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        items = c["gear"]
-        for i, item in enumerate(items):
-            (col1 if i % 2 == 0 else col2).markdown(f"• {item}")
-        st.markdown(f"<br><div class='gold'>💰 Starting Gold: {c['gold']} gp</div>", unsafe_allow_html=True)
+        # Combat
+        st.markdown('<div class="card"><div class="section-title">Combat</div>', unsafe_allow_html=True)
+        cc1, cc2, cc3, cc4 = st.columns(4)
+        dm = stat_mod(c["stats"]["DEX"])
+        cc1.metric("HP", c["hp"])
+        cc2.metric("Armor Class", c["ac"])
+        cc3.metric("Initiative", f"{dm:+}")
+        cc4.metric("Proficiency", f"+{c['prof_bonus']}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ---- TAB 3: Spells ----
-    with tabs[2]:
-        if not c.get("spells"):
-            st.info(f"{c['class']}s don't have spells (or none were generated).")
-        else:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">Spell List</div>', unsafe_allow_html=True)
-            cantrips = [s for s in c["spells"] if s.get("level") == 0]
-            leveled  = [s for s in c["spells"] if s.get("level", 0) > 0]
-            if cantrips:
-                st.markdown("**Cantrips**")
-                for s in cantrips:
-                    st.markdown(f"""<div class="spell-card"><b>{s['name']}</b> <span style='color:#a080d0;font-size:0.85em;'>({s.get('school','')})</span><br><span style='color:#c8b8a0;'>{s.get('description','')}</span></div>""", unsafe_allow_html=True)
-            if leveled:
-                st.markdown("**Leveled Spells**")
-                for s in sorted(leveled, key=lambda x: x.get("level",1)):
-                    st.markdown(f"""<div class="spell-card"><b>{s['name']}</b> <span style='color:#a080d0;font-size:0.85em;'>Level {s.get('level','?')} {s.get('school','')}</span><br><span style='color:#c8b8a0;'>{s.get('description','')}</span></div>""", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Equipment
+    st.markdown('<div class="card"><div class="section-title">Equipment</div>', unsafe_allow_html=True)
+    gear_cols = st.columns(3)
+    for i, item in enumerate(c["gear"]):
+        gear_cols[i % 3].markdown(f"• {item}")
+    st.markdown(f'<div class="gold">💰 Gold: {c["gold"]} gp</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # ---- TAB 4: Personality ----
-    with tabs[3]:
-        p = c.get("personality", {})
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Personality Profile</div>', unsafe_allow_html=True)
-        for icon, key, label in [("💬","trait","Personality Trait"),("⚡","ideal","Ideal"),("🔗","bond","Bond"),("💔","flaw","Flaw")]:
-            st.markdown(f"""
-            <div style='margin-bottom:14px;'>
-                <div class='section-title' style='font-size:0.85rem;margin-bottom:4px;'>{icon} {label}</div>
-                <div style='color:#e8dcc8;font-style:italic;'>{p.get(key,'...')}</div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Spells
+    if c.get("spells"):
+        st.markdown('<div class="card"><div class="section-title">Spells</div>', unsafe_allow_html=True)
+        for s in c["spells"]:
+            src = f" [{s['src']}]" if s.get("src") else ""
+            st.markdown(f"✨ **{s['name']}**{src} — {s['desc']}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ---- TAB 5: Backstory ----
-    with tabs[4]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Backstory</div>', unsafe_allow_html=True)
-        st.markdown(f"<div style='line-height:1.8;color:#e8dcc8;'>{c['story']}</div>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- TAB 6: NPCs ----
-    with tabs[5]:
-        npcs = c.get("npcs", [])
-        if not npcs:
-            st.info("No NPCs generated.")
-        else:
-            for npc in npcs:
-                st.markdown(f"""
-                <div class="npc-card">
-                    <div style='font-family:Cinzel,serif;color:#c9a44c;font-size:1.05rem;'>{npc.get('name','Unknown')}</div>
-                    <div class='subtitle'>{npc.get('role','')} — {npc.get('relationship','')}</div>
-                    <div style='color:#a89070;margin-top:6px;font-style:italic;'>🔒 Secret: {npc.get('secret','')}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-    # ---- TAB 7: Quest Hook ----
-    with tabs[6]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">⚔️ Your Adventure Begins...</div>', unsafe_allow_html=True)
-        st.markdown(f"<div style='font-size:1.1rem;line-height:1.9;color:#e8dcc8;font-style:italic;'>{c.get('quest_hook','No quest hook generated.')}</div>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---- TAB 8: Export ----
-    with tabs[7]:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Export & Share</div>', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button(
-                "📄 Download PDF Sheet",
-                make_pdf(c),
-                file_name=f"{c['name'].replace(' ','_')}_character_sheet.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-        with col2:
-            st.download_button(
-                "💾 Download JSON",
-                export_character(c),
-                file_name=f"{c['name'].replace(' ','_')}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Backstory
+    st.markdown('<div class="card"><div class="section-title">Backstory</div>', unsafe_allow_html=True)
+    for para in c["story"].split("\n\n"):
+        if para.strip():
+            st.write(para.strip())
+    st.markdown('</div>', unsafe_allow_html=True)
