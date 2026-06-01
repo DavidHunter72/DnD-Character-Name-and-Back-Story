@@ -96,9 +96,21 @@ for k,v in {
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def get_client():
-    key = st.secrets.get("ANTHROPIC_API_KEY","")
+    import os
+    key = ""
+    try:
+        key = st.secrets.get("ANTHROPIC_API_KEY", "")
+    except Exception:
+        pass
     if not key:
-        st.error("Add ANTHROPIC_API_KEY to your Streamlit secrets.")
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        st.error(
+            "⚠️ **API key missing.** "
+            "Go to your app on [share.streamlit.io](https://share.streamlit.io) → "
+            "Settings → Secrets and add:\n\n"
+            "```\nANTHROPIC_API_KEY = \"sk-ant-...\"\n```"
+        )
         st.stop()
     return anthropic.Anthropic(api_key=key)
 
@@ -163,7 +175,7 @@ def calc_hp(class_names, levels, con_mod):
 def generate_name(race):
     client = get_client()
     msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=50,
         messages=[{"role":"user","content":f"Create ONE fantasy D&D name for a {race}. Return only the name."}]
     )
@@ -181,7 +193,7 @@ def generate_backstory(name, race, background, alignment, class_desc):
         f"motivation, a flaw, a personality trait, and a plot hook. 3–4 paragraphs."
     )
     msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1000,
         system="You are a creative D&D storyteller. Write vivid, specific backstories.",
         messages=[{"role":"user","content":prompt}]
@@ -200,7 +212,7 @@ def generate_spells(caster_entries):
         f"Return only those 5 lines, nothing else."
     )
     msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=400,
         system="You are a D&D 5e expert. Return only the list.",
         messages=[{"role":"user","content":prompt}]
@@ -222,7 +234,7 @@ def generate_portrait(name, race, class_names, alignment):
     # Step 1: write a portrait prompt
     cls_str = " / ".join(class_names)
     prompt_msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=120,
         system="You write vivid, concise image prompts for fantasy character portraits. Return only the prompt, no preamble.",
         messages=[{"role":"user","content":(
@@ -236,7 +248,7 @@ def generate_portrait(name, race, class_names, alignment):
 
     # Step 2: generate image
     img_response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=2048,
         messages=[{"role":"user","content":[
             {"type":"text","text":(
