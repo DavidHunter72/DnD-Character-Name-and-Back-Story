@@ -124,6 +124,7 @@ def total_levels():
     return sum(c["level"] for c in st.session_state.classes)
 
 def auto_stats(class_names):
+    # Build priority order: primary stats for all classes first, then secondaries
     pri = []
     for c in class_names:
         for s in CLASS_DATA.get(c.lower(), {}).get("pri", []):
@@ -132,17 +133,30 @@ def auto_stats(class_names):
     order = pri + [s for s in STATS if s not in pri]
     stats = {s: 8 for s in STATS}
     points = 27
-    changed = True
-    while points > 0 and changed:
-        changed = False
-        for stat in order:
-            if stats[stat] < 15:
-                nxt = stats[stat] + 1
-                cost = POINT_COST[nxt]
-                if points >= cost:
-                    stats[stat] = nxt
-                    points -= cost
-                    changed = True
+
+    # Max out each stat in priority order as far as points allow
+    for stat in order:
+        for target in [15, 14, 13, 12, 11, 10, 9, 8]:
+            cost = sum(POINT_COST[v] - POINT_COST[stats[stat]]
+                       for v in range(stats[stat] + 1, target + 1)
+                       if v in POINT_COST)
+            total_cost = POINT_COST[target] - POINT_COST[stats[stat]]
+            if total_cost <= points:
+                points -= total_cost
+                stats[stat] = target
+                break
+
+    # Spend any remaining points on non-primary stats in order
+    for stat in order:
+        while stats[stat] < 15 and points > 0:
+            nxt = stats[stat] + 1
+            cost = POINT_COST[nxt] - POINT_COST[stats[stat]]
+            if points >= cost:
+                stats[stat] = nxt
+                points -= cost
+            else:
+                break
+
     return stats
 
 def get_equipment(class_names):
@@ -185,17 +199,25 @@ def generate_backstory(name, race, background, alignment, class_desc):
     client = get_client()
     bg_note = f"Background: {background}\n" if background else ""
     prompt = (
-        f"Write an immersive D&D backstory for:\n"
+        f"Write a rich, immersive D&D character backstory for:\n"
         f"Name: {name}\nRace: {race}\n{bg_note}"
         f"Alignment: {alignment}\nClasses: {class_desc}\n\n"
-        f"Weave the multiclass combination naturally into the narrative. "
-        f"Include: origin, how they came to train in multiple disciplines, "
-        f"motivation, a flaw, a personality trait, and a plot hook. 3–4 paragraphs."
+        f"Write 6–8 substantial paragraphs covering:\n"
+        f"1. Early life and origins — where they grew up, family, culture\n"
+        f"2. A formative childhood event that shaped who they are\n"
+        f"3. How they discovered and trained in their first class\n"
+        f"4. The turning point or event that led them to multiclass (if applicable)\n"
+        f"5. A defining adventure or conflict that tested them\n"
+        f"6. Their core motivation and what drives them forward\n"
+        f"7. A significant personal flaw or internal struggle\n"
+        f"8. A current plot hook — an unresolved mystery, enemy, or quest pulling them forward\n\n"
+        f"Write in a vivid fantasy novel style. Use specific names for places and people. "
+        f"Make the multiclass combination feel organic and earned, not arbitrary."
     )
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system="You are a creative D&D storyteller. Write vivid, specific backstories.",
+        max_tokens=2000,
+        system="You are a creative D&D storyteller and worldbuilder. Write rich, detailed, novelistic backstories with specific imagery and named characters and locations.",
         messages=[{"role":"user","content":prompt}]
     )
     return msg.content[0].text
@@ -230,39 +252,38 @@ def generate_spells(caster_entries):
     return spells[:5]
 
 def generate_portrait(name, race, class_names, alignment):
+    import requests
+    import urllib.parse
     client = get_client()
-    # Step 1: write a portrait prompt
+
+    # Step 1: Claude writes a detailed visual prompt
     cls_str = " / ".join(class_names)
     prompt_msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=120,
-        system="You write vivid, concise image prompts for fantasy character portraits. Return only the prompt, no preamble.",
+        max_tokens=150,
+        system="You write vivid, concise image prompts for fantasy character portraits. Return only the prompt text, no preamble or explanation.",
         messages=[{"role":"user","content":(
-            f"Write a concise image-generation prompt (under 70 words) for a fantasy portrait of:\n"
+            f"Write a detailed image-generation prompt (50–80 words) for a fantasy portrait of:\n"
             f"Name: {name}, Race: {race}, Classes: {cls_str}, Alignment: {alignment}\n"
-            f"Describe appearance, distinctive features blending class aesthetics, equipment, and mood. "
-            f"Cinematic fantasy art style. No text in image."
+            f"Describe: physical appearance, hair, eyes, skin, distinctive racial features, "
+            f"equipment and clothing blending all classes, expression and mood. "
+            f"Style: cinematic fantasy oil painting, dramatic lighting, detailed, no text in image."
         )}]
     )
     portrait_prompt = prompt_msg.content[0].text.strip()
 
-    # Step 2: generate image
-    img_response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        messages=[{"role":"user","content":[
-            {"type":"text","text":(
-                f"Generate a detailed fantasy RPG character portrait. "
-                f"{portrait_prompt} "
-                f"Square format, waist-up or bust shot, dramatic cinematic lighting, "
-                f"highly detailed fantasy concept art style."
-            )}
-        ]}]
-    )
-    for block in img_response.content:
-        if block.type == "image":
-            return base64.b64decode(block.source.data)
-    return None
+    # Step 2: Generate via Pollinations (free, no key needed)
+    encoded = urllib.parse.quote(portrait_prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&nologo=true&seed={random.randint(1,99999)}"
+
+    try:
+        resp = requests.get(url, timeout=60)
+        if resp.status_code == 200 and resp.headers.get("content-type","").startswith("image"):
+            return resp.content, portrait_prompt
+    except Exception as e:
+        st.warning(f"Portrait fetch failed: {e}")
+
+    return None, portrait_prompt
 
 # ── PDF export ─────────────────────────────────────────────────────────────────
 
@@ -466,29 +487,31 @@ if st.session_state.page == "builder":
 
             st.write("🎨 Painting your portrait…")
             portrait_bytes = None
+            portrait_prompt = ""
             try:
-                portrait_bytes = generate_portrait(name, race, class_names, alignment)
+                portrait_bytes, portrait_prompt = generate_portrait(name, race, class_names, alignment)
             except Exception as e:
                 st.warning(f"Portrait generation failed: {e}")
 
             status.update(label="Character ready!", state="complete")
 
         st.session_state.character = {
-            "name":         name,
-            "race":         race,
-            "background":   background,
-            "alignment":    alignment,
-            "classes":      [dict(e) for e in st.session_state.classes],
-            "total_level":  total_lvl,
-            "stats":        stats,
-            "hp":           calc_hp(class_names, class_levels, cm),
-            "ac":           best_ac(class_names, dm),
-            "gear":         get_equipment(class_names),
-            "gold":         random.randint(20, 150),
-            "spells":       spells,
-            "story":        story,
-            "prof_bonus":   prof_bonus(total_lvl),
+            "name":           name,
+            "race":           race,
+            "background":     background,
+            "alignment":      alignment,
+            "classes":        [dict(e) for e in st.session_state.classes],
+            "total_level":    total_lvl,
+            "stats":          stats,
+            "hp":             calc_hp(class_names, class_levels, cm),
+            "ac":             best_ac(class_names, dm),
+            "gear":           get_equipment(class_names),
+            "gold":           random.randint(20, 150),
+            "spells":         spells,
+            "story":          story,
+            "prof_bonus":     prof_bonus(total_lvl),
             "portrait_bytes": portrait_bytes,
+            "portrait_prompt": portrait_prompt,
         }
         st.session_state.portrait_bytes = portrait_bytes
         st.session_state.page = "sheet"
@@ -526,11 +549,16 @@ else:
     with left_col:
         if c.get("portrait_bytes"):
             st.image(c["portrait_bytes"], use_container_width=True)
+            if c.get("portrait_prompt"):
+                with st.expander("🖼️ Portrait prompt"):
+                    st.caption(c["portrait_prompt"])
         else:
             st.markdown("""
             <div style="aspect-ratio:1;background:rgba(255,255,255,.05);border:1px solid #c9a44c;
                         border-radius:12px;display:flex;align-items:center;justify-content:center;
-                        color:#888;font-size:14px">No portrait</div>
+                        color:#888;font-size:14px;padding:20px;text-align:center">
+                Portrait unavailable — check internet connection and try regenerating
+            </div>
             """, unsafe_allow_html=True)
 
         # PDF download
